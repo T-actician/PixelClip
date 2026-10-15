@@ -42,6 +42,11 @@ background:conic-gradient(#fff 25%,#d9dee0 0 50%,#fff 0 75%,#d9dee0 0) 0 0/20px 
 #busy{position:absolute;inset:0;display:none;place-items:center;background:rgba(20,34,42,.55);font:600 16px var(--display)}
 #busy::before{content:"";position:absolute;top:0;bottom:0;width:3px;background:var(--cut);box-shadow:0 0 24px 6px var(--cut);animation:scan 1.3s ease-in-out infinite alternate}
 @keyframes scan{from{left:0}to{left:calc(100% - 3px)}}
+#pct{position:absolute;right:12px;bottom:12px;min-width:92px;display:grid;gap:5px;padding:7px 10px;border-radius:10px;background:rgba(16,27,33,.88);font:600 12px var(--body);font-variant-numeric:tabular-nums}
+#pct span{display:flex;justify-content:space-between;gap:12px}
+#pct em{font-style:normal}
+#pct i{display:block;height:3px;border-radius:2px;background:var(--line);overflow:hidden}
+#pct b{display:block;height:100%;width:0;background:var(--cut);transition:width .15s linear}
 #ring{position:fixed;pointer-events:none;border:2px solid var(--cut);border-radius:50%;display:none;transform:translate(-50%,-50%);z-index:5}
 #strip{grid-area:strip;display:flex;gap:10px;padding:12px 20px;overflow-x:auto;border-top:1px solid var(--line)}
 .th{flex:none;width:96px;height:72px;border-radius:8px;border:2px solid transparent;position:relative;overflow:hidden;cursor:pointer;background:#000;padding:0}
@@ -84,7 +89,7 @@ aside{border-left:0;border-top:1px solid var(--line)}}
   <div id="viewer"><div id="frame">
     <img id="before" alt="Original">
     <div id="handle"></div>
-    <div id="busy">Cutting out the subject...</div>
+    <div id="busy">Cutting out the subject...<div id="pct" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span><em id="pctl">Cutting</em><em id="pctn">0%</em></span><i><b id="pctb"></b></i></div></div>
   </div></div>
 </main>
 
@@ -153,7 +158,7 @@ function addFiles(files){
 async function runQueue(){
   if(state.running)return;state.running=true;
   for(const it of state.items){if(it.status!=='queued')continue;
-    it.status='working';strip();if(cur()===it)show();
+    it.status='working';it.t0=Date.now();it.est=estFor(state.model);const mdl=state.model;strip();if(cur()===it)show();tick();
     try{
       const fd=new FormData();fd.append('file',it.file);fd.append('model',state.model);fd.append('matting',$('#matting').checked);fd.append('clean',$('#clean').checked);
       const r=await fetch('/api/remove',{method:'POST',body:fd});
@@ -161,12 +166,23 @@ async function runQueue(){
       const bmp=await createImageBitmap(await r.blob());
       it.cv=document.createElement('canvas');it.cv.width=bmp.width;it.cv.height=bmp.height;it.cv.getContext('2d').drawImage(bmp,0,0);
       it.base=document.createElement('canvas');it.base.width=bmp.width;it.base.height=bmp.height;it.base.getContext('2d').drawImage(bmp,0,0);
-      it.status='done';
+      it.status='done';logTime(mdl,Date.now()-it.t0);
     }catch(err){it.status='error';toast(it.name+': '+err.message)}
     strip();if(cur()===it)show();
   }
   state.running=false;
 }
+
+/* ---------- progress (estimated from how long this model took before) ---------- */
+const DEF={fast:3000,balanced:6000,ultra:15000};
+let avg={};try{avg=JSON.parse(localStorage.getItem('pc_avg')||'{}')}catch(e){}
+const estFor=m=>avg[m]||DEF[m];
+function logTime(m,ms){ms=Math.min(ms,DEF[m]*3);avg[m]=avg[m]?Math.round(avg[m]*.5+ms*.5):ms;try{localStorage.setItem('pc_avg',JSON.stringify(avg))}catch(e){}}
+function tick(){const it=cur();if(!it||(it.status!=='working'&&it.status!=='queued'))return;
+  let p=0,l='Waiting';
+  if(it.status==='working'){l='Cutting';p=Math.min(95,95*(1-Math.exp(-2*(Date.now()-it.t0)/it.est)))}
+  p=Math.round(p);$('#pctl').textContent=l;$('#pctn').textContent=p+'%';$('#pctb').style.width=p+'%';$('#pct').setAttribute('aria-valuenow',p)}
+setInterval(tick,120);
 
 /* ---------- views ---------- */
 function strip(){
@@ -185,7 +201,7 @@ function show(){
   frame.querySelectorAll('canvas').forEach(c=>c.remove());
   if(it.cv)frame.insertBefore(it.cv,before);
   $('#busy').style.display=(it.status==='working'||it.status==='queued')?'grid':'none';
-  paintBg();applyFx();strip();layout();
+  paintBg();applyFx();strip();layout();tick();
 }
 function layout(){
   const area=$('#stage'),w0=before.naturalWidth||16,h0=before.naturalHeight||9,r=w0/h0;
