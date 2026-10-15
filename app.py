@@ -6,8 +6,16 @@ from typing import List
 import uvicorn
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
+import numpy as np
 from PIL import Image, ImageOps
+from pymatting import estimate_foreground_ml
 from rembg import new_session, remove
+from scipy import ndimage as ndi
+
+try:
+    from rembg.bg import alpha_matting_cutout
+except ImportError:  # older/newer rembg layouts
+    alpha_matting_cutout = None
 
 HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))  # works inside the .exe build too
 MAX_BYTES = 25 * 1024 * 1024
@@ -31,27 +39,52 @@ def session_for(key: str):
         return _sessions[key]
 
 
+def refine(img: Image.Image, mask: Image.Image) -> Image.Image:
+    """Turn a rough mask into a clean, smooth cutout with no background halo."""
+    a = np.asarray(mask.convert("L"), dtype=np.float32) / 255.0
+    a[a < 0.05] = 0.0                                    # kill faint haze around the subject
+    solid = a > 0.5
+    lab, n = ndi.label(solid)
+    if n > 1:                                            # drop stray specks, keep real subjects
+        sizes = ndi.sum(solid, lab, range(1, n + 1))
+        keep = np.flatnonzero(sizes >= max(50, sizes.max() * 0.03)) + 1
+        a *= ndi.binary_dilation(np.isin(lab, keep), iterations=4)
+    a = np.clip((a - 0.15) / 0.70, 0.0, 1.0)             # tighten the soft edge (removes halo)
+    a = ndi.gaussian_filter(a, 0.6)                      # anti-alias so edges look smooth
+    a[a < 0.02] = 0.0
+    a[a > 0.98] = 1.0                                    # fully solid inside, no see-through haze
+    rgb = np.asarray(img.convert("RGB"), dtype=np.float32) / 255.0
+    if img.width * img.height <= 12_000_000:             # swap background-colored edge pixels for true subject color
+        rgb = estimate_foreground_ml(rgb, a)
+    out = np.dstack([np.clip(rgb, 0, 1), a])
+    out[a == 0, :3] = 0
+    return Image.fromarray((out * 255 + 0.5).astype(np.uint8), "RGBA")
+
+
 @app.get("/")
 def index():
     return FileResponse(HERE / "index.html")
 
 
 @app.post("/api/remove")
-def remove_bg(file: UploadFile = File(...), model: str = Form("balanced"), matting: bool = Form(False)):
+def remove_bg(file: UploadFile = File(...), model: str = Form("balanced"), matting: bool = Form(False), clean: bool = Form(True)):
     try:
         img = ImageOps.exif_transpose(Image.open(file.file)).convert("RGBA")
     except Exception:
         raise HTTPException(400, "That file is not a readable image.")
     if max(img.size) > MAX_SIDE:
         img.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
-    out = remove(
-        img,
-        session=session_for(model),
-        alpha_matting=matting,
-        alpha_matting_foreground_threshold=240,
-        alpha_matting_background_threshold=15,
-        alpha_matting_erode_size=8,
-    )
+    mask = remove(img, session=session_for(model), only_mask=True, post_process_mask=True)
+    if matting and alpha_matting_cutout:
+        try:
+            mask = alpha_matting_cutout(img.convert("RGB"), mask, 240, 15, 8).getchannel("A")
+        except Exception:
+            pass  # keep the plain mask if matting fails on this image
+    if clean:
+        out = refine(img, mask)
+    else:
+        out = img.copy()
+        out.putalpha(mask)
     buf = io.BytesIO()
     out.save(buf, "PNG")
     return Response(buf.getvalue(), media_type="image/png")

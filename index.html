@@ -94,6 +94,7 @@ aside{border-left:0;border-top:1px solid var(--line)}}
   <section><h2>Quality</h2>
     <div class="seg" id="model"><button data-v="fast">Fast</button><button data-v="balanced" class="on">Balanced</button><button data-v="ultra">Ultra</button></div>
     <p class="hint" style="margin-top:8px">Ultra keeps hair and fur sharp. First use downloads the model.</p></section>
+  <section><label class="chk"><input type="checkbox" id="clean" checked><span>Clean edges<small>Removes halos, specks and background color on the edge.</small></span></label></section>
   <section><label class="chk"><input type="checkbox" id="matting"><span>Soften edges<small>Alpha matting for fine hair and glass. Slower.</small></span></label></section>
   <section><h2>View</h2>
     <div class="seg" id="mode"><button data-v="compare" class="on">Compare</button><button data-v="edit">Touch up</button></div></section>
@@ -116,7 +117,8 @@ aside{border-left:0;border-top:1px solid var(--line)}}
     <label class="hint" for="shadow">Shadow</label><input type="range" id="shadow" min="0" max="10" value="0">
     <div class="row" style="margin-top:8px"><label class="hint" for="outline" style="flex:none">Outline</label><input type="range" id="outline" min="0" max="10" value="0"><input type="color" id="ocolor" value="#ffffff" aria-label="Outline color"></div></section>
   <section><h2>Export</h2>
-    <div class="seg" id="fmt"><button data-v="png" class="on">PNG</button><button data-v="webp">WebP</button><button data-v="jpg">JPG</button></div></section>
+    <div class="seg" id="fmt"><button data-v="png" class="on">PNG</button><button data-v="webp">WebP</button><button data-v="jpg">JPG</button></div>
+    <p class="hint" style="margin-top:8px">Use PNG for transparent cutouts. JPG cannot be transparent.</p></section>
   <section><h2>From a link</h2><div class="row"><input type="text" id="url" placeholder="https://site.com/photo.jpg" aria-label="Image link"><button class="btn" id="urlgo">Add</button></div></section>
   <div class="push">
     <button class="btn main" id="dl" disabled>Download image</button>
@@ -153,7 +155,7 @@ async function runQueue(){
   for(const it of state.items){if(it.status!=='queued')continue;
     it.status='working';strip();if(cur()===it)show();
     try{
-      const fd=new FormData();fd.append('file',it.file);fd.append('model',state.model);fd.append('matting',$('#matting').checked);
+      const fd=new FormData();fd.append('file',it.file);fd.append('model',state.model);fd.append('matting',$('#matting').checked);fd.append('clean',$('#clean').checked);
       const r=await fetch('/api/remove',{method:'POST',body:fd});
       if(!r.ok)throw new Error((await r.json()).detail||'Failed');
       const bmp=await createImageBitmap(await r.blob());
@@ -254,7 +256,7 @@ function compose(it){
   else if(state.fmt==='jpg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}
   x.filter=fx(c.width);x.drawImage(it.cv,0,0);return c;
 }
-const blobOf=it=>new Promise(r=>compose(it).toBlob(r,{png:'image/png',webp:'image/webp',jpg:'image/jpeg'}[state.fmt],.95));
+const blobOf=it=>new Promise(r=>compose(it).toBlob(r,{png:'image/png',webp:'image/webp',jpg:'image/jpeg'}[state.fmt],state.fmt==='jpg'?.95:1));
 function save(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
 $('#dl').onclick=async()=>{const it=cur();save(await blobOf(it),`${it.name}-pixelclip.${state.fmt}`);toast('Downloaded')};
 $('#dlall').onclick=async()=>{

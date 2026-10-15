@@ -22,7 +22,7 @@ Built for designers and developers who need cutouts without sending their work t
 Requires Python 3.9 or newer.
 
 ```bash
-git clone https://github.com/<your-username>/PixelClip.git
+git clone https://github.com/<T-actician>/PixelClip.git
 cd PixelClip
 
 python -m venv .venv
