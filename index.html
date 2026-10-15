@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cutline - background remover</title>
+<title>PixelClip - background remover</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -65,13 +65,14 @@ label.chk small{display:block;color:var(--dim);font-weight:400}
 .hint{color:var(--dim);font-weight:400;font-size:13px}
 .push{margin-top:auto;display:grid;gap:10px}
 #toast{position:fixed;bottom:112px;left:24px;background:var(--chalk);color:#10181C;padding:10px 14px;border-radius:10px;font-weight:600;display:none;z-index:9}
+input[type=text]{flex:1;min-width:0;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--chalk);padding:9px 10px;font:500 14px var(--body)}
 @media(max-width:860px){body{grid-template-columns:1fr;grid-template-rows:56px minmax(320px,55vh) 88px auto;grid-template-areas:"top" "stage" "strip" "panel";overflow:auto}
 aside{border-left:0;border-top:1px solid var(--line)}}
 @media(prefers-reduced-motion:reduce){#drop rect,#busy::before{animation:none}}
 </style>
 </head>
 <body>
-<header><div class="logo"></div><b>Cutline</b><span>Background remover that runs on your machine</span></header>
+<header><div class="logo"></div><b>PixelClip</b><span>Background remover that runs on your machine</span></header>
 
 <main id="stage">
   <div id="drop" tabindex="0" role="button" aria-label="Choose images">
@@ -99,6 +100,7 @@ aside{border-left:0;border-top:1px solid var(--line)}}
   <section id="brushbox" hidden><h2>Brush</h2>
     <div class="seg" id="btype"><button data-v="erase" class="on">Erase</button><button data-v="restore">Restore</button></div>
     <div class="row" style="margin-top:10px"><input type="range" id="bsize" min="1" max="20" value="5" aria-label="Brush size"></div>
+    <div class="row" style="margin-top:10px"><button class="btn" id="undo" style="flex:1">Undo</button><button class="btn" id="redo" style="flex:1">Redo</button></div>
     <button class="btn" id="reset" style="margin-top:10px;width:100%">Reset touch-ups</button></section>
   <section><h2>Background</h2>
     <div class="sw" id="sw">
@@ -110,8 +112,12 @@ aside{border-left:0;border-top:1px solid var(--line)}}
       <input type="color" id="custom" value="#22cc88" aria-label="Custom color">
     </div>
     <button class="btn" id="bgimg" style="margin-top:10px;width:100%">Use an image</button><input type="file" id="bgfile" accept="image/*" hidden></section>
+  <section><h2>Effects</h2>
+    <label class="hint" for="shadow">Shadow</label><input type="range" id="shadow" min="0" max="10" value="0">
+    <div class="row" style="margin-top:8px"><label class="hint" for="outline" style="flex:none">Outline</label><input type="range" id="outline" min="0" max="10" value="0"><input type="color" id="ocolor" value="#ffffff" aria-label="Outline color"></div></section>
   <section><h2>Export</h2>
     <div class="seg" id="fmt"><button data-v="png" class="on">PNG</button><button data-v="webp">WebP</button><button data-v="jpg">JPG</button></div></section>
+  <section><h2>From a link</h2><div class="row"><input type="text" id="url" placeholder="https://site.com/photo.jpg" aria-label="Image link"><button class="btn" id="urlgo">Add</button></div></section>
   <div class="push">
     <button class="btn main" id="dl" disabled>Download image</button>
     <button class="btn" id="dlall" disabled>Download all as ZIP</button>
@@ -177,7 +183,7 @@ function show(){
   frame.querySelectorAll('canvas').forEach(c=>c.remove());
   if(it.cv)frame.insertBefore(it.cv,before);
   $('#busy').style.display=(it.status==='working'||it.status==='queued')?'grid':'none';
-  paintBg();strip();layout();
+  paintBg();applyFx();strip();layout();
 }
 function layout(){
   const area=$('#stage'),w0=before.naturalWidth||16,h0=before.naturalHeight||9,r=w0/h0;
@@ -186,7 +192,7 @@ function layout(){
   const cmp=state.mode==='compare'&&cur()&&cur().status==='done';
   before.style.display=handle.style.display=cmp?'block':'none';
   frame.style.cursor=state.mode==='edit'?'none':'default';
-  setPos(state.pos);
+  setPos(state.pos);applyFx();
 }
 function setPos(p){state.pos=Math.max(0,Math.min(1,p));
   before.style.clipPath=`inset(0 ${(1-state.pos)*100}% 0 0)`;handle.style.left=state.pos*100+'%'}
@@ -198,7 +204,7 @@ function paintBg(){
 
 /* ---------- pointer: slider + brush ---------- */
 let down=false;
-frame.addEventListener('pointerdown',e=>{if(!cur()||cur().status!=='done')return;down=true;frame.setPointerCapture(e.pointerId);move(e)});
+frame.addEventListener('pointerdown',e=>{if(!cur()||cur().status!=='done')return;if(state.mode==='edit')snap(cur());down=true;frame.setPointerCapture(e.pointerId);move(e)});
 frame.addEventListener('pointermove',move);
 frame.addEventListener('pointerup',()=>down=false);
 frame.addEventListener('pointerleave',()=>$('#ring').style.display='none');
@@ -215,7 +221,23 @@ function move(e){
   else{c.clearRect(x-rad,y-rad,rad*2,rad*2);c.drawImage(before,0,0,it.cv.width,it.cv.height)}
   c.restore();
 }
-$('#reset').onclick=()=>{const it=cur();if(!it||!it.base)return;const c=it.cv.getContext('2d');c.clearRect(0,0,it.cv.width,it.cv.height);c.drawImage(it.base,0,0)};
+$('#reset').onclick=()=>{const it=cur();if(!it||!it.base)return;snap(it);const c=it.cv.getContext('2d');c.clearRect(0,0,it.cv.width,it.cv.height);c.drawImage(it.base,0,0)};
+
+/* ---------- undo / redo ---------- */
+const px=it=>it.cv.getContext('2d').getImageData(0,0,it.cv.width,it.cv.height);
+function snap(it){it.undo=it.undo||[];it.redo=[];it.undo.push(px(it));if(it.undo.length>20)it.undo.shift()}
+function step(from,to){const it=cur();if(!it||!it[from]||!it[from].length)return;it[to]=it[to]||[];it[to].push(px(it));it.cv.getContext('2d').putImageData(it[from].pop(),0,0)}
+$('#undo').onclick=()=>step('undo','redo');$('#redo').onclick=()=>step('redo','undo');
+window.addEventListener('keydown',e=>{if(e.target.type==='text'||!(e.ctrlKey||e.metaKey))return;const k=e.key.toLowerCase();
+  if(k==='z'){e.preventDefault();e.shiftKey?step('redo','undo'):step('undo','redo')}else if(k==='y'){e.preventDefault();step('redo','undo')}});
+
+/* ---------- effects: shadow + outline (same recipe for preview and export) ---------- */
+function fx(w){const s=+$('#shadow').value,o=+$('#outline').value,p=[];
+  if(o){const t=(w*o/1000).toFixed(2)+'px',c=$('#ocolor').value;p.push(`drop-shadow(${t} 0 0 ${c}) drop-shadow(-${t} 0 0 ${c}) drop-shadow(0 ${t} 0 ${c}) drop-shadow(0 -${t} 0 ${c})`)}
+  if(s){const u=w*s/500;p.push(`drop-shadow(0 ${(u/2).toFixed(2)}px ${u.toFixed(2)}px rgba(0,0,0,.5))`)}
+  return p.join(' ')||'none'}
+function applyFx(){const it=cur();if(it&&it.cv)it.cv.style.filter=fx(frame.clientWidth)}
+['#shadow','#outline','#ocolor'].forEach(s=>$(s).addEventListener('input',applyFx));
 
 /* ---------- background ---------- */
 $('#sw').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
@@ -230,15 +252,22 @@ function compose(it){
   if(state.bgImg){const s=Math.max(c.width/state.bgImg.width,c.height/state.bgImg.height),w=state.bgImg.width*s,h=state.bgImg.height*s;x.drawImage(state.bgImg,(c.width-w)/2,(c.height-h)/2,w,h)}
   else if(state.bg){x.fillStyle=state.bg;x.fillRect(0,0,c.width,c.height)}
   else if(state.fmt==='jpg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}
-  x.drawImage(it.cv,0,0);return c;
+  x.filter=fx(c.width);x.drawImage(it.cv,0,0);return c;
 }
 const blobOf=it=>new Promise(r=>compose(it).toBlob(r,{png:'image/png',webp:'image/webp',jpg:'image/jpeg'}[state.fmt],.95));
 function save(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
-$('#dl').onclick=async()=>{const it=cur();save(await blobOf(it),`${it.name}-cutline.${state.fmt}`);toast('Downloaded')};
+$('#dl').onclick=async()=>{const it=cur();save(await blobOf(it),`${it.name}-pixelclip.${state.fmt}`);toast('Downloaded')};
 $('#dlall').onclick=async()=>{
   const fd=new FormData();
-  for(const it of state.items)if(it.status==='done')fd.append('files',await blobOf(it),`${it.name}-cutline.${state.fmt}`);
-  const r=await fetch('/api/zip',{method:'POST',body:fd});save(await r.blob(),'cutline-images.zip');toast('Downloaded ZIP')};
+  for(const it of state.items)if(it.status==='done')fd.append('files',await blobOf(it),`${it.name}-pixelclip.${state.fmt}`);
+  const r=await fetch('/api/zip',{method:'POST',body:fd});save(await r.blob(),'pixelclip-images.zip');toast('Downloaded ZIP')};
+
+/* ---------- add from link ---------- */
+async function addUrl(){const u=$('#url').value.trim();if(!u)return;
+  try{const r=await fetch('/api/fetch?url='+encodeURIComponent(u));if(!r.ok)throw new Error((await r.json()).detail);
+    const b=await r.blob(),n=(new URL(u).pathname.split('/').pop()||'image').replace(/\.[^.]+$/,'')||'image';
+    addFiles([new File([b],n+'.png',{type:b.type})]);$('#url').value=''}catch(err){toast(err.message||'Could not load that link.')}}
+$('#urlgo').onclick=addUrl;$('#url').onkeydown=e=>{if(e.key==='Enter')addUrl()};
 
 /* ---------- inputs ---------- */
 const pick=()=>$('#file').click();
