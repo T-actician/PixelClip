@@ -8,14 +8,9 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 import numpy as np
 from PIL import Image, ImageOps
-from pymatting import estimate_foreground_ml
+from pymatting import estimate_alpha_cf, estimate_foreground_ml
 from rembg import new_session, remove
 from scipy import ndimage as ndi
-
-try:
-    from rembg.bg import alpha_matting_cutout
-except ImportError:  # older/newer rembg layouts
-    alpha_matting_cutout = None
 
 HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))  # works inside the .exe build too
 MAX_BYTES = 25 * 1024 * 1024
@@ -39,22 +34,49 @@ def session_for(key: str):
         return _sessions[key]
 
 
-def refine(img: Image.Image, mask: Image.Image) -> Image.Image:
-    """Turn a rough mask into a clean, smooth cutout with no background halo."""
-    a = np.asarray(mask.convert("L"), dtype=np.float32) / 255.0
-    a[a < 0.05] = 0.0                                    # kill faint haze around the subject
-    solid = a > 0.5
+def drop_specks(solid: np.ndarray) -> np.ndarray:
+    """Keep real subjects, drop tiny stray blobs."""
     lab, n = ndi.label(solid)
-    if n > 1:                                            # drop stray specks, keep real subjects
-        sizes = ndi.sum(solid, lab, range(1, n + 1))
-        keep = np.flatnonzero(sizes >= max(50, sizes.max() * 0.03)) + 1
-        a *= ndi.binary_dilation(np.isin(lab, keep), iterations=4)
-    a = np.clip((a - 0.15) / 0.70, 0.0, 1.0)             # tighten the soft edge (removes halo)
-    a = ndi.gaussian_filter(a, 0.6)                      # anti-alias so edges look smooth
-    a[a < 0.02] = 0.0
-    a[a > 0.98] = 1.0                                    # fully solid inside, no see-through haze
+    if n <= 1:
+        return solid
+    sizes = ndi.sum(solid, lab, range(1, n + 1))
+    keep = np.flatnonzero(sizes >= max(50, sizes.max() * 0.03)) + 1
+    return np.isin(lab, keep)
+
+
+def matte(img: Image.Image, solid: np.ndarray, wide: bool) -> np.ndarray:
+    """Re-measure the true edge from the photo's own colors inside a thin band around the mask."""
+    h, w = solid.shape
+    f = min(1.0, (3_000_000 / (h * w)) ** 0.5)           # keep matting fast on big photos
+    sw, sh = max(1, int(w * f)), max(1, int(h * f))
+    small = img.convert("RGB").resize((sw, sh), Image.LANCZOS) if f < 1 else img.convert("RGB")
+    rgb = np.asarray(small, dtype=np.float64) / 255.0
+    sol = np.asarray(Image.fromarray((solid * 255).astype(np.uint8)).resize((sw, sh), Image.LANCZOS)) > 127 if f < 1 else solid
+    r = max(4, int(round(0.008 * max(sw, sh) * (2.2 if wide else 1.0))))
+    trimap = np.full(sol.shape, 0.5)
+    trimap[ndi.binary_erosion(sol, iterations=r)] = 1.0   # surely subject
+    trimap[~ndi.binary_dilation(sol, iterations=r)] = 0.0  # surely background
+    a = np.clip(estimate_alpha_cf(rgb, trimap), 0, 1).astype(np.float32)
+    if f < 1:
+        a = np.asarray(Image.fromarray((a * 255).astype(np.uint8)).resize((w, h), Image.LANCZOS), dtype=np.float32) / 255.0
+    return a
+
+
+def refine(img: Image.Image, mask: Image.Image, wide: bool = False) -> Image.Image:
+    """Turn a rough mask into a clean, smooth cutout with no background halo."""
+    m = np.asarray(mask.convert("L"), dtype=np.float32) / 255.0
+    m[m < 0.05] = 0.0                                    # kill faint haze
+    solid = drop_specks(m > 0.5)
+    try:
+        a = matte(img, solid, wide)                      # edge measured from the real photo
+        a *= ndi.binary_dilation(solid, iterations=int(0.012 * max(m.shape)) + 6)  # nothing far from the subject
+    except Exception:                                    # fallback: simple mask tightening
+        a = np.clip((m * ndi.binary_dilation(solid, iterations=4) - 0.15) / 0.70, 0.0, 1.0)
+        a = ndi.gaussian_filter(a, 0.6)
+    a[a < 0.03] = 0.0
+    a[a > 0.97] = 1.0                                    # fully solid inside, no see-through haze
     rgb = np.asarray(img.convert("RGB"), dtype=np.float32) / 255.0
-    if img.width * img.height <= 12_000_000:             # swap background-colored edge pixels for true subject color
+    if img.width * img.height <= 12_000_000:             # replace background-colored edge pixels with true subject color
         rgb = estimate_foreground_ml(rgb, a)
     out = np.dstack([np.clip(rgb, 0, 1), a])
     out[a == 0, :3] = 0
@@ -75,13 +97,8 @@ def remove_bg(file: UploadFile = File(...), model: str = Form("balanced"), matti
     if max(img.size) > MAX_SIDE:
         img.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
     mask = remove(img, session=session_for(model), only_mask=True, post_process_mask=True)
-    if matting and alpha_matting_cutout:
-        try:
-            mask = alpha_matting_cutout(img.convert("RGB"), mask, 240, 15, 8).getchannel("A")
-        except Exception:
-            pass  # keep the plain mask if matting fails on this image
     if clean:
-        out = refine(img, mask)
+        out = refine(img, mask, wide=matting)
     else:
         out = img.copy()
         out.putalpha(mask)
