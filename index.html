@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cutline - background remover</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--mat:#14222A;--grid:#1D313A;--panel:#101B21;--chalk:#E9F0F2;--dim:#8AA3AD;--cut:#FF4D8D;--line:#2A424C;
+--display:"Bricolage Grotesque",system-ui,sans-serif;--body:"Instrument Sans",system-ui,sans-serif}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--mat);color:var(--chalk);font:500 14px/1.4 var(--body);display:grid;grid-template-columns:1fr 300px;grid-template-rows:56px 1fr 96px;
+grid-template-areas:"top top" "stage panel" "strip panel";overflow:hidden}
+header{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line)}
+header b{font:800 22px var(--display);letter-spacing:-.02em}
+header span{color:var(--dim)}
+header .logo{width:22px;height:22px;border:2px dashed var(--cut);border-radius:6px}
+#stage{grid-area:stage;position:relative;display:grid;place-items:center;padding:24px;overflow:hidden;
+background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:32px 32px}
+#drop{width:min(640px,100%);aspect-ratio:16/9;display:grid;place-content:center;text-align:center;gap:14px;cursor:pointer;position:relative;border-radius:20px;transition:background .2s}
+#drop svg{position:absolute;inset:0;width:100%;height:100%}
+#drop rect{fill:none;stroke:var(--cut);stroke-width:2.5;stroke-dasharray:10 8;animation:march 1s linear infinite}
+@keyframes march{to{stroke-dashoffset:-18}}
+#drop.over{background:rgba(255,77,141,.1)}
+#drop h1{font:800 clamp(28px,4vw,46px)/1.05 var(--display);letter-spacing:-.03em;position:relative}
+#drop p{color:var(--dim);position:relative}
+.btn{font:600 14px var(--body);color:var(--chalk);background:transparent;border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer;transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--dim)}
+.btn.main{background:var(--cut);border-color:var(--cut);color:#1A0610;font-weight:700}
+.btn.main:hover{filter:brightness(1.1)}
+.btn:focus-visible,.seg button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--chalk);outline-offset:2px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+#viewer{display:none;width:100%;height:100%;place-items:center}
+#frame{position:relative;border-radius:6px;overflow:hidden;box-shadow:0 0 0 1px var(--line),0 30px 80px rgba(0,0,0,.45);touch-action:none;
+background:conic-gradient(#fff 25%,#d9dee0 0 50%,#fff 0 75%,#d9dee0 0) 0 0/20px 20px}
+#frame canvas,#frame img{position:absolute;inset:0;width:100%;height:100%;display:block}
+#before{clip-path:inset(0 50% 0 0);pointer-events:none}
+#handle{position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--cut);cursor:ew-resize}
+#handle::after{content:"";position:absolute;top:50%;left:-13px;width:28px;height:28px;margin-top:-14px;border-radius:50%;background:var(--cut);box-shadow:0 0 0 4px rgba(255,77,141,.3)}
+#busy{position:absolute;inset:0;display:none;place-items:center;background:rgba(20,34,42,.55);font:600 16px var(--display)}
+#busy::before{content:"";position:absolute;top:0;bottom:0;width:3px;background:var(--cut);box-shadow:0 0 24px 6px var(--cut);animation:scan 1.3s ease-in-out infinite alternate}
+@keyframes scan{from{left:0}to{left:calc(100% - 3px)}}
+#ring{position:fixed;pointer-events:none;border:2px solid var(--cut);border-radius:50%;display:none;transform:translate(-50%,-50%);z-index:5}
+#strip{grid-area:strip;display:flex;gap:10px;padding:12px 20px;overflow-x:auto;border-top:1px solid var(--line)}
+.th{flex:none;width:96px;height:72px;border-radius:8px;border:2px solid transparent;position:relative;overflow:hidden;cursor:pointer;background:#000;padding:0}
+.th img{width:100%;height:100%;object-fit:cover;opacity:.85}
+.th.on{border-color:var(--cut)}
+.th i{position:absolute;right:4px;bottom:4px;font:600 11px var(--body);font-style:normal;background:rgba(0,0,0,.7);padding:2px 6px;border-radius:6px}
+aside{grid-area:panel;background:var(--panel);border-left:1px solid var(--line);padding:18px;overflow-y:auto;display:flex;flex-direction:column;gap:20px}
+aside h2{font:600 13px var(--body);color:var(--dim);margin-bottom:8px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:none;border:0;color:var(--dim);font:600 13px var(--body);padding:8px 4px;cursor:pointer}
+.seg button.on{background:var(--chalk);color:#10181C}
+.row{display:flex;align-items:center;gap:10px}
+.sw{display:flex;gap:8px;flex-wrap:wrap}
+.sw button{width:28px;height:28px;border-radius:50%;border:2px solid var(--line);cursor:pointer;padding:0}
+.sw button.on{border-color:var(--chalk);box-shadow:0 0 0 2px var(--panel) inset}
+.sw .none{background:conic-gradient(#fff 25%,#b8c0c3 0 50%,#fff 0 75%,#b8c0c3 0) 0 0/10px 10px}
+input[type=color]{width:28px;height:28px;border:0;background:none;padding:0;cursor:pointer}
+input[type=range]{width:100%;accent-color:var(--cut)}
+label.chk{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+label.chk small{display:block;color:var(--dim);font-weight:400}
+.hint{color:var(--dim);font-weight:400;font-size:13px}
+.push{margin-top:auto;display:grid;gap:10px}
+#toast{position:fixed;bottom:112px;left:24px;background:var(--chalk);color:#10181C;padding:10px 14px;border-radius:10px;font-weight:600;display:none;z-index:9}
+@media(max-width:860px){body{grid-template-columns:1fr;grid-template-rows:56px minmax(320px,55vh) 88px auto;grid-template-areas:"top" "stage" "strip" "panel";overflow:auto}
+aside{border-left:0;border-top:1px solid var(--line)}}
+@media(prefers-reduced-motion:reduce){#drop rect,#busy::before{animation:none}}
+</style>
+</head>
+<body>
+<header><div class="logo"></div><b>Cutline</b><span>Background remover that runs on your machine</span></header>
+
+<main id="stage">
+  <div id="drop" tabindex="0" role="button" aria-label="Choose images">
+    <svg><rect x="2" y="2" width="calc(100% - 4px)" height="calc(100% - 4px)" rx="18"/></svg>
+    <h1>Drop images here<br>to cut out the subject</h1>
+    <p>Or paste with Ctrl+V. Nothing leaves your computer.</p>
+    <div><span class="btn main">Choose images</span></div>
+  </div>
+  <div id="viewer"><div id="frame">
+    <img id="before" alt="Original">
+    <div id="handle"></div>
+    <div id="busy">Cutting out the subject...</div>
+  </div></div>
+</main>
+
+<div id="strip"></div>
+
+<aside>
+  <section><h2>Quality</h2>
+    <div class="seg" id="model"><button data-v="fast">Fast</button><button data-v="balanced" class="on">Balanced</button><button data-v="ultra">Ultra</button></div>
+    <p class="hint" style="margin-top:8px">Ultra keeps hair and fur sharp. First use downloads the model.</p></section>
+  <section><label class="chk"><input type="checkbox" id="matting"><span>Soften edges<small>Alpha matting for fine hair and glass. Slower.</small></span></label></section>
+  <section><h2>View</h2>
+    <div class="seg" id="mode"><button data-v="compare" class="on">Compare</button><button data-v="edit">Touch up</button></div></section>
+  <section id="brushbox" hidden><h2>Brush</h2>
+    <div class="seg" id="btype"><button data-v="erase" class="on">Erase</button><button data-v="restore">Restore</button></div>
+    <div class="row" style="margin-top:10px"><input type="range" id="bsize" min="1" max="20" value="5" aria-label="Brush size"></div>
+    <button class="btn" id="reset" style="margin-top:10px;width:100%">Reset touch-ups</button></section>
+  <section><h2>Background</h2>
+    <div class="sw" id="sw">
+      <button class="none on" data-c="" title="Transparent" aria-label="Transparent"></button>
+      <button style="background:#fff" data-c="#ffffff" aria-label="White"></button>
+      <button style="background:#000" data-c="#000000" aria-label="Black"></button>
+      <button style="background:#FF4D8D" data-c="#FF4D8D" aria-label="Pink"></button>
+      <button style="background:#3D6BFF" data-c="#3D6BFF" aria-label="Blue"></button>
+      <input type="color" id="custom" value="#22cc88" aria-label="Custom color">
+    </div>
+    <button class="btn" id="bgimg" style="margin-top:10px;width:100%">Use an image</button><input type="file" id="bgfile" accept="image/*" hidden></section>
+  <section><h2>Export</h2>
+    <div class="seg" id="fmt"><button data-v="png" class="on">PNG</button><button data-v="webp">WebP</button><button data-v="jpg">JPG</button></div></section>
+  <div class="push">
+    <button class="btn main" id="dl" disabled>Download image</button>
+    <button class="btn" id="dlall" disabled>Download all as ZIP</button>
+    <button class="btn" id="more">Add more images</button>
+  </div>
+</aside>
+<input type="file" id="file" accept="image/*" multiple hidden>
+<div id="ring"></div><div id="toast" role="status"></div>
+
+<script>
+const $=s=>document.querySelector(s);
+const state={items:[],cur:-1,mode:'compare',brush:'erase',fmt:'png',model:'balanced',bg:'',bgImg:null,pos:.5,running:false};
+const frame=$('#frame'),before=$('#before'),handle=$('#handle');
+
+function seg(id,key,cb){$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  $(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));state[key]=b.dataset.v;cb&&cb()})}
+seg('#model','model');seg('#fmt','fmt');seg('#btype','brush');
+seg('#mode','mode',()=>{$('#brushbox').hidden=state.mode!=='edit';layout()});
+
+function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',3200)}
+const cur=()=>state.items[state.cur];
+
+/* ---------- intake ---------- */
+function addFiles(files){
+  const imgs=[...files].filter(f=>f.type.startsWith('image/'));
+  if(!imgs.length)return toast('Those files are not images.');
+  const first=state.items.length;
+  imgs.forEach(f=>state.items.push({name:f.name.replace(/\.[^.]+$/,''),file:f,url:URL.createObjectURL(f),status:'queued',cv:null,base:null}));
+  strip();if(state.cur<0)select(first);runQueue();
+}
+async function runQueue(){
+  if(state.running)return;state.running=true;
+  for(const it of state.items){if(it.status!=='queued')continue;
+    it.status='working';strip();if(cur()===it)show();
+    try{
+      const fd=new FormData();fd.append('file',it.file);fd.append('model',state.model);fd.append('matting',$('#matting').checked);
+      const r=await fetch('/api/remove',{method:'POST',body:fd});
+      if(!r.ok)throw new Error((await r.json()).detail||'Failed');
+      const bmp=await createImageBitmap(await r.blob());
+      it.cv=document.createElement('canvas');it.cv.width=bmp.width;it.cv.height=bmp.height;it.cv.getContext('2d').drawImage(bmp,0,0);
+      it.base=document.createElement('canvas');it.base.width=bmp.width;it.base.height=bmp.height;it.base.getContext('2d').drawImage(bmp,0,0);
+      it.status='done';
+    }catch(err){it.status='error';toast(it.name+': '+err.message)}
+    strip();if(cur()===it)show();
+  }
+  state.running=false;
+}
+
+/* ---------- views ---------- */
+function strip(){
+  $('#strip').innerHTML='';
+  state.items.forEach((it,i)=>{const b=document.createElement('button');b.className='th'+(i===state.cur?' on':'');
+    b.innerHTML=`<img src="${it.url}" alt=""><i>${{queued:'Waiting',working:'Cutting',done:'Done',error:'Error'}[it.status]}</i>`;
+    b.onclick=()=>select(i);$('#strip').append(b)});
+  const done=state.items.filter(i=>i.status==='done').length;
+  $('#dlall').disabled=!done;$('#dl').disabled=!(cur()&&cur().status==='done');
+}
+function select(i){state.cur=i;const it=cur();
+  $('#drop').style.display='none';$('#viewer').style.display='grid';
+  before.onload=()=>{layout()};before.src=it.url;show();strip()}
+function show(){
+  const it=cur();if(!it)return;
+  frame.querySelectorAll('canvas').forEach(c=>c.remove());
+  if(it.cv)frame.insertBefore(it.cv,before);
+  $('#busy').style.display=(it.status==='working'||it.status==='queued')?'grid':'none';
+  paintBg();strip();layout();
+}
+function layout(){
+  const area=$('#stage'),w0=before.naturalWidth||16,h0=before.naturalHeight||9,r=w0/h0;
+  const w=Math.min(area.clientWidth-48,(area.clientHeight-48)*r);
+  frame.style.width=w+'px';frame.style.height=w/r+'px';
+  const cmp=state.mode==='compare'&&cur()&&cur().status==='done';
+  before.style.display=handle.style.display=cmp?'block':'none';
+  frame.style.cursor=state.mode==='edit'?'none':'default';
+  setPos(state.pos);
+}
+function setPos(p){state.pos=Math.max(0,Math.min(1,p));
+  before.style.clipPath=`inset(0 ${(1-state.pos)*100}% 0 0)`;handle.style.left=state.pos*100+'%'}
+function paintBg(){
+  if(state.bgImg){frame.style.background=`center/cover url(${state.bgImg.src})`}
+  else if(state.bg){frame.style.background=state.bg}
+  else frame.style.background='';
+}
+
+/* ---------- pointer: slider + brush ---------- */
+let down=false;
+frame.addEventListener('pointerdown',e=>{if(!cur()||cur().status!=='done')return;down=true;frame.setPointerCapture(e.pointerId);move(e)});
+frame.addEventListener('pointermove',move);
+frame.addEventListener('pointerup',()=>down=false);
+frame.addEventListener('pointerleave',()=>$('#ring').style.display='none');
+function move(e){
+  const it=cur();if(!it||it.status!=='done')return;
+  const rc=frame.getBoundingClientRect();
+  if(state.mode==='compare'){if(down)setPos((e.clientX-rc.left)/rc.width);return}
+  const k=it.cv.width/rc.width,rad=it.cv.width*(+$('#bsize').value/200),ring=$('#ring');
+  ring.style.cssText=`display:block;left:${e.clientX}px;top:${e.clientY}px;width:${rad*2/k}px;height:${rad*2/k}px`;
+  if(!down)return;
+  const x=(e.clientX-rc.left)*k,y=(e.clientY-rc.top)*k,c=it.cv.getContext('2d');
+  c.save();c.beginPath();c.arc(x,y,rad,0,7);c.clip();
+  if(state.brush==='erase')c.clearRect(x-rad,y-rad,rad*2,rad*2);
+  else{c.clearRect(x-rad,y-rad,rad*2,rad*2);c.drawImage(before,0,0,it.cv.width,it.cv.height)}
+  c.restore();
+}
+$('#reset').onclick=()=>{const it=cur();if(!it||!it.base)return;const c=it.cv.getContext('2d');c.clearRect(0,0,it.cv.width,it.cv.height);c.drawImage(it.base,0,0)};
+
+/* ---------- background ---------- */
+$('#sw').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  $('#sw').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));state.bg=b.dataset.c;state.bgImg=null;paintBg()});
+$('#custom').oninput=e=>{state.bg=e.target.value;state.bgImg=null;$('#sw').querySelectorAll('button').forEach(x=>x.classList.remove('on'));paintBg()};
+$('#bgimg').onclick=()=>$('#bgfile').click();
+$('#bgfile').onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{state.bgImg=im;paintBg()};im.src=URL.createObjectURL(f)};
+
+/* ---------- export ---------- */
+function compose(it){
+  const c=document.createElement('canvas');c.width=it.cv.width;c.height=it.cv.height;const x=c.getContext('2d');
+  if(state.bgImg){const s=Math.max(c.width/state.bgImg.width,c.height/state.bgImg.height),w=state.bgImg.width*s,h=state.bgImg.height*s;x.drawImage(state.bgImg,(c.width-w)/2,(c.height-h)/2,w,h)}
+  else if(state.bg){x.fillStyle=state.bg;x.fillRect(0,0,c.width,c.height)}
+  else if(state.fmt==='jpg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}
+  x.drawImage(it.cv,0,0);return c;
+}
+const blobOf=it=>new Promise(r=>compose(it).toBlob(r,{png:'image/png',webp:'image/webp',jpg:'image/jpeg'}[state.fmt],.95));
+function save(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+$('#dl').onclick=async()=>{const it=cur();save(await blobOf(it),`${it.name}-cutline.${state.fmt}`);toast('Downloaded')};
+$('#dlall').onclick=async()=>{
+  const fd=new FormData();
+  for(const it of state.items)if(it.status==='done')fd.append('files',await blobOf(it),`${it.name}-cutline.${state.fmt}`);
+  const r=await fetch('/api/zip',{method:'POST',body:fd});save(await r.blob(),'cutline-images.zip');toast('Downloaded ZIP')};
+
+/* ---------- inputs ---------- */
+const pick=()=>$('#file').click();
+$('#drop').onclick=pick;$('#drop').onkeydown=e=>{if(e.key==='Enter'||e.key===' ')pick()};$('#more').onclick=pick;
+$('#file').onchange=e=>{addFiles(e.target.files);e.target.value=''};
+['dragenter','dragover'].forEach(t=>window.addEventListener(t,e=>{e.preventDefault();$('#drop').classList.add('over')}));
+['dragleave','drop'].forEach(t=>window.addEventListener(t,e=>{e.preventDefault();$('#drop').classList.remove('over')}));
+window.addEventListener('drop',e=>addFiles(e.dataTransfer.files));
+window.addEventListener('paste',e=>addFiles(e.clipboardData.files));
+window.addEventListener('resize',layout);
+</script>
+</body>
+</html>
