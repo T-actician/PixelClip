@@ -1,4 +1,4 @@
-"""PixelClip - background remover. Run: python app.py"""
+"""PixelClip - photo toolkit (background removal, ID photos, resizing). Run: python app.py"""
 import io, ipaddress, socket, sys, threading, urllib.parse, urllib.request, webbrowser, zipfile
 from pathlib import Path
 from typing import List
@@ -12,6 +12,11 @@ from pymatting import estimate_foreground_ml
 from rembg import new_session, remove
 from scipy import ndimage as ndi
 
+try:  # face detection for the passport/ID tool (optional: the rest works without it)
+    import cv2
+except Exception:
+    cv2 = None
+
 HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))  # works inside the .exe build too
 MAX_BYTES = 25 * 1024 * 1024
 MODELS = {
@@ -20,6 +25,7 @@ MODELS = {
     "ultra": "birefnet-general",       # sharpest edges, hair, fur (slower, bigger download)
 }
 _sessions, _lock = {}, threading.Lock()
+_cascade = None
 MAX_SIDE = 4096
 
 app = FastAPI(title="PixelClip")
@@ -80,6 +86,32 @@ def remove_bg(file: UploadFile = File(...), model: str = Form("balanced"), matti
     buf = io.BytesIO()
     out.save(buf, "PNG")
     return Response(buf.getvalue(), media_type="image/png")
+
+
+@app.post("/api/face")
+def find_face(file: UploadFile = File(...)):
+    """Find the largest front-facing face. Returns a box as fractions (0-1) of the image."""
+    if cv2 is None:
+        return {"found": False}
+    try:
+        img = ImageOps.exif_transpose(Image.open(file.file)).convert("RGB")
+    except Exception:
+        raise HTTPException(400, "That file is not a readable image.")
+    scale = min(1.0, 1000 / max(img.size))
+    if scale < 1:
+        img = img.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))), Image.LANCZOS)
+    gray = cv2.equalizeHist(cv2.cvtColor(np.asarray(img), cv2.COLOR_RGB2GRAY))
+    global _cascade
+    with _lock:
+        if _cascade is None:
+            _cascade = cv2.CascadeClassifier(str(Path(cv2.data.haarcascades) / "haarcascade_frontalface_default.xml"))
+    h, w = gray.shape
+    side = max(30, int(w * 0.08))
+    faces = _cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=6, minSize=(side, side))
+    if len(faces) == 0:
+        return {"found": False}
+    x, y, fw, fh = max(faces, key=lambda f: int(f[2]) * int(f[3]))
+    return {"found": True, "x": float(x) / w, "y": float(y) / h, "w": float(fw) / w, "h": float(fh) / h}
 
 
 @app.get("/api/fetch")

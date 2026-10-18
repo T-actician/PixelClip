@@ -20,4 +20,5 @@ PyInstaller.__main__.run([
     "--collect-all", "onnxruntime",
     "--collect-all", "numba",
     "--collect-all", "llvmlite",
+    "--collect-all", "cv2",
 ])

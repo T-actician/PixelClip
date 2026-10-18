@@ -1,6 +1,6 @@
 # PixelClip
 
-Fast, clean image background removal that runs entirely on your own computer. No uploads, no accounts, no limits.
+Fast, clean image background removal plus everyday photo tools (ID photos, product and social sizes, watermarking, file-size limits) that run entirely on your own computer. No uploads, no accounts, no limits.
 
 Built for designers and developers who need cutouts without sending their work to a website.
 
@@ -16,6 +16,12 @@ Built for designers and developers who need cutouts without sending their work t
 - **Backgrounds:** transparent, preset colors, a custom color, or your own image
 - **Effects:** drop shadow and colored outline
 - **Export formats:** PNG, WebP, or JPG
+- **Passport / ID photos:** 35x45 mm and 2x2 in at 300 dpi. Finds the face, sizes and centers the head, adds a white background, and can lay out a 4x6 in or A4 print sheet with many copies
+- **Product presets:** marketplace square, high-res square, and 4:5 portrait, with the subject centered and padded on white
+- **Social sizes:** Instagram, Story/WhatsApp status, profile picture, Facebook cover, X header, YouTube thumbnail, LinkedIn banner, or any custom size. Choose Subject, Fit, or Fill
+- **Watermark:** text or logo, any corner, centered, or tiled, with size and opacity. Applied to every image, including the ZIP
+- **Limit file size:** set a target such as 100 KB. Quality drops first, then dimensions, until it fits
+- **Output view:** shows exactly what you will download, with size, format, and file weight
 
 ## Quick start
 
@@ -44,7 +50,8 @@ The first time you use each quality level, its AI model downloads once and is th
 3. Drag the slider in **Compare** view to check the result.
 4. Switch to **Touch up** to fix mistakes with **Erase** and **Restore**.
 5. Pick a background and any effects.
-6. Choose a format, then **Download image** or **Download all as ZIP**.
+6. Optional: choose a **Size & layout** preset, add a **Watermark**, or turn on **Limit file size**. Open **Output** to preview the result.
+7. Choose a format, then **Download image** or **Download all as ZIP**.
 
 ### Shortcuts
 
@@ -77,7 +84,7 @@ The result is in `dist/PixelClip/`. Share that whole folder.
 
 ```
 PixelClip/
-  app.py            FastAPI server and background removal
+  app.py            FastAPI server, background removal, face finder
   index.html        The whole interface (HTML, CSS, JS)
   build.py          Standalone app builder
   requirements.txt  Python dependencies
@@ -87,6 +94,8 @@ PixelClip/
 
 - Everything runs locally. Images are never sent anywhere except from your browser to the app on your own machine. The "From a link" feature downloads the image you point to.
 - Images larger than 4096 px on the long side are scaled down.
+- Passport / ID photos need a front-facing face. If none is found, framing is estimated from the cutout.
+- Print sheets and ID sizes are exported at 300 dpi pixel dimensions.
 - It runs on CPU by default. For an NVIDIA GPU, replace `rembg[cpu]` with `rembg[gpu]` in `requirements.txt`.
 - Shadow and outline effects in exports need a browser that supports canvas filters (Chrome, Edge, and Firefox do; Safari does not yet).
 

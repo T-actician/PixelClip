@@ -3,13 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PixelClip - background remover</title>
+<title>PixelClip - photo toolkit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--mat:#14222A;--grid:#1D313A;--panel:#101B21;--chalk:#E9F0F2;--dim:#8AA3AD;--cut:#FF4D8D;--line:#2A424C;
 --display:"Bricolage Grotesque",system-ui,sans-serif;--body:"Instrument Sans",system-ui,sans-serif}
 *{box-sizing:border-box;margin:0}
+[hidden]{display:none!important}
 html,body{height:100%}
 body{background:var(--mat);color:var(--chalk);font:500 14px/1.4 var(--body);display:grid;grid-template-columns:1fr 300px;grid-template-rows:56px 1fr 96px;
 grid-template-areas:"top top" "stage panel" "strip panel";overflow:hidden}
@@ -70,14 +71,20 @@ label.chk small{display:block;color:var(--dim);font-weight:400}
 .hint{color:var(--dim);font-weight:400;font-size:13px}
 .push{margin-top:auto;display:grid;gap:10px}
 #toast{position:fixed;bottom:112px;left:24px;background:var(--chalk);color:#10181C;padding:10px 14px;border-radius:10px;font-weight:600;display:none;z-index:9}
-input[type=text]{flex:1;min-width:0;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--chalk);padding:9px 10px;font:500 14px var(--body)}
+input[type=text],input[type=number],select{flex:1;min-width:0;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--chalk);padding:9px 10px;font:500 14px var(--body)}
+select{width:100%;background:var(--panel)}
+.stack{display:grid;gap:8px;margin-top:10px}
+.chips{display:flex;gap:6px;margin-top:8px}.chips .btn{flex:1;padding:6px 0;font-size:12px}
+#outbox{display:none;width:100%;height:100%;place-items:center}
+#out{border-radius:4px;box-shadow:0 0 0 1px var(--line),0 30px 80px rgba(0,0,0,.45);background:conic-gradient(#fff 25%,#d9dee0 0 50%,#fff 0 75%,#d9dee0 0) 0 0/20px 20px}
+#outinfo{position:absolute;left:16px;bottom:12px;display:none;padding:7px 10px;border-radius:10px;background:rgba(16,27,33,.88);font:600 12px var(--body);font-variant-numeric:tabular-nums}
 @media(max-width:860px){body{grid-template-columns:1fr;grid-template-rows:56px minmax(320px,55vh) 88px auto;grid-template-areas:"top" "stage" "strip" "panel";overflow:auto}
 aside{border-left:0;border-top:1px solid var(--line)}}
 @media(prefers-reduced-motion:reduce){#drop rect,#busy::before{animation:none}}
 </style>
 </head>
 <body>
-<header><div class="logo"></div><b>PixelClip</b><span>Background remover that runs on your machine</span></header>
+<header><div class="logo"></div><b>PixelClip</b><span>Cut out, resize and prepare photos on your own machine</span></header>
 
 <main id="stage">
   <div id="drop" tabindex="0" role="button" aria-label="Choose images">
@@ -91,6 +98,8 @@ aside{border-left:0;border-top:1px solid var(--line)}}
     <div id="handle"></div>
     <div id="busy">Cutting out the subject...<div id="pct" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span><em id="pctl">Cutting</em><em id="pctn">0%</em></span><i><b id="pctb"></b></i></div></div>
   </div></div>
+  <div id="outbox"><canvas id="out" aria-label="Output preview"></canvas></div>
+  <div id="outinfo" role="status"></div>
 </main>
 
 <div id="strip"></div>
@@ -102,7 +111,7 @@ aside{border-left:0;border-top:1px solid var(--line)}}
   <section><label class="chk"><input type="checkbox" id="clean" checked><span>Clean edges<small>Removes halos, specks and background color on the edge.</small></span></label></section>
   <section><label class="chk"><input type="checkbox" id="matting"><span>Soft edges<small>Gentler edge for hair and fur. Leave off for suits and objects.</small></span></label></section>
   <section><h2>View</h2>
-    <div class="seg" id="mode"><button data-v="compare" class="on">Compare</button><button data-v="edit">Touch up</button></div></section>
+    <div class="seg" id="mode"><button data-v="compare" class="on">Compare</button><button data-v="edit">Touch up</button><button data-v="output">Output</button></div></section>
   <section id="brushbox" hidden><h2>Brush</h2>
     <div class="seg" id="btype"><button data-v="erase" class="on">Erase</button><button data-v="restore">Restore</button></div>
     <div class="row" style="margin-top:10px"><input type="range" id="bsize" min="1" max="20" value="5" aria-label="Brush size"></div>
@@ -121,9 +130,29 @@ aside{border-left:0;border-top:1px solid var(--line)}}
   <section><h2>Effects</h2>
     <label class="hint" for="shadow">Shadow</label><input type="range" id="shadow" min="0" max="10" value="0">
     <div class="row" style="margin-top:8px"><label class="hint" for="outline" style="flex:none">Outline</label><input type="range" id="outline" min="0" max="10" value="0"><input type="color" id="ocolor" value="#ffffff" aria-label="Outline color"></div></section>
+  <section><h2>Size &amp; layout</h2>
+    <select id="preset" aria-label="Size preset"></select>
+    <div class="row" id="customsz" hidden style="margin-top:8px"><input type="number" id="cw" min="16" max="8000" value="1080" aria-label="Width in pixels"><span class="hint">&times;</span><input type="number" id="ch" min="16" max="8000" value="1080" aria-label="Height in pixels"><span class="hint">px</span></div>
+    <div id="fitbox" hidden style="margin-top:10px">
+      <div class="seg" id="fit"><button data-v="subject" class="on">Subject</button><button data-v="fit">Fit</button><button data-v="fill">Fill</button></div>
+      <div class="row" id="padbox" style="margin-top:8px"><label class="hint" for="pad" style="flex:none">Padding</label><input type="range" id="pad" min="0" max="30" value="10"></div>
+    </div>
+    <div id="sheetbox" hidden style="margin-top:10px"><label class="hint" for="sheet">Print sheet</label>
+      <select id="sheet"><option value="">Single photo</option><option value="4x6">4x6 in sheet (many copies)</option><option value="a4">A4 sheet (many copies)</option></select></div>
+    <p class="hint" id="presethint" style="margin-top:8px"></p></section>
+  <section><label class="chk"><input type="checkbox" id="wm"><span>Watermark<small>Stamps every image, including the ZIP.</small></span></label>
+    <div class="stack" id="wmbox" hidden>
+      <div class="row"><input type="text" id="wmtext" value="&copy; Your name" aria-label="Watermark text"><button class="btn" id="wmlogo">Logo</button><input type="file" id="wmfile" accept="image/*" hidden></div>
+      <select id="wmpos" aria-label="Watermark position"><option value="br">Bottom right</option><option value="bl">Bottom left</option><option value="tr">Top right</option><option value="tl">Top left</option><option value="mc">Center</option><option value="tile">Tiled across the image</option></select>
+      <div class="row"><label class="hint" for="wmsize" style="width:52px">Size</label><input type="range" id="wmsize" min="5" max="50" value="20"></div>
+      <div class="row"><label class="hint" for="wmop" style="width:52px">Opacity</label><input type="range" id="wmop" min="10" max="100" value="60"></div>
+    </div></section>
   <section><h2>Export</h2>
     <div class="seg" id="fmt"><button data-v="png" class="on">PNG</button><button data-v="webp">WebP</button><button data-v="jpg">JPG</button></div>
-    <p class="hint" style="margin-top:8px">Use PNG for transparent cutouts. JPG cannot be transparent.</p></section>
+    <p class="hint" style="margin-top:8px">Use PNG for transparent cutouts. JPG cannot be transparent.</p>
+    <label class="chk" style="margin-top:12px"><input type="checkbox" id="cmp"><span>Limit file size<small>Lowers quality, then size, until it fits. PNG switches to JPG or WebP.</small></span></label>
+    <div id="cmpbox" hidden><div class="row" style="margin-top:8px"><span class="hint" style="flex:none">Under</span><input type="number" id="cmpkb" min="5" max="20000" value="100" aria-label="Maximum size in KB"><span class="hint">KB</span></div>
+      <div class="chips" id="kbq"><button class="btn" data-kb="50">50</button><button class="btn" data-kb="100">100</button><button class="btn" data-kb="200">200</button><button class="btn" data-kb="500">500</button></div></div></section>
   <section><h2>From a link</h2><div class="row"><input type="text" id="url" placeholder="https://site.com/photo.jpg" aria-label="Image link"><button class="btn" id="urlgo">Add</button></div></section>
   <div class="push">
     <button class="btn main" id="dl" disabled>Download image</button>
@@ -136,13 +165,14 @@ aside{border-left:0;border-top:1px solid var(--line)}}
 
 <script>
 const $=s=>document.querySelector(s);
-const state={items:[],cur:-1,mode:'compare',brush:'erase',fmt:'png',model:'balanced',bg:'',bgImg:null,pos:.5,running:false};
+const state={items:[],cur:-1,mode:'compare',brush:'erase',fmt:'png',model:'balanced',bg:'',bgImg:null,pos:.5,running:false,preset:'orig',fit:'subject',wmImg:null};
 const frame=$('#frame'),before=$('#before'),handle=$('#handle');
 
 function seg(id,key,cb){$(id).addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
   $(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));state[key]=b.dataset.v;cb&&cb()})}
 seg('#model','model');seg('#fmt','fmt');seg('#btype','brush');
-seg('#mode','mode',()=>{$('#brushbox').hidden=state.mode!=='edit';layout()});
+seg('#mode','mode',()=>{$('#brushbox').hidden=state.mode!=='edit';syncView();layout()});
+seg('#fit','fit',()=>{$('#padbox').hidden=state.fit!=='subject'});
 
 function toast(t){const el=$('#toast');el.textContent=t;el.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>el.style.display='none',3200)}
 const cur=()=>state.items[state.cur];
@@ -194,8 +224,11 @@ function strip(){
   $('#dlall').disabled=!done;$('#dl').disabled=!(cur()&&cur().status==='done');
 }
 function select(i){state.cur=i;const it=cur();
-  $('#drop').style.display='none';$('#viewer').style.display='grid';
+  $('#drop').style.display='none';syncView();
   before.onload=()=>{layout()};before.src=it.url;show();strip()}
+function syncView(){const out=state.mode==='output'&&cur();
+  $('#viewer').style.display=cur()&&!out?'grid':'none';$('#outbox').style.display=out?'grid':'none';
+  $('#outinfo').style.display=out?'block':'none'}
 function show(){
   const it=cur();if(!it)return;
   frame.querySelectorAll('canvas').forEach(c=>c.remove());
@@ -210,7 +243,7 @@ function layout(){
   const cmp=state.mode==='compare'&&cur()&&cur().status==='done';
   before.style.display=handle.style.display=cmp?'block':'none';
   frame.style.cursor=state.mode==='edit'?'none':'default';
-  setPos(state.pos);applyFx();
+  setPos(state.pos);applyFx();refresh();
 }
 function setPos(p){state.pos=Math.max(0,Math.min(1,p));
   before.style.clipPath=`inset(0 ${(1-state.pos)*100}% 0 0)`;handle.style.left=state.pos*100+'%'}
@@ -264,21 +297,177 @@ $('#custom').oninput=e=>{state.bg=e.target.value;state.bgImg=null;$('#sw').query
 $('#bgimg').onclick=()=>$('#bgfile').click();
 $('#bgfile').onchange=e=>{const f=e.target.files[0];if(!f)return;const im=new Image();im.onload=()=>{state.bgImg=im;paintBg()};im.src=URL.createObjectURL(f)};
 
-/* ---------- export ---------- */
-function compose(it){
-  const c=document.createElement('canvas');c.width=it.cv.width;c.height=it.cv.height;const x=c.getContext('2d');
-  if(state.bgImg){const s=Math.max(c.width/state.bgImg.width,c.height/state.bgImg.height),w=state.bgImg.width*s,h=state.bgImg.height*s;x.drawImage(state.bgImg,(c.width-w)/2,(c.height-h)/2,w,h)}
-  else if(state.bg){x.fillStyle=state.bg;x.fillRect(0,0,c.width,c.height)}
-  else if(state.fmt==='jpg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}
-  x.filter=fx(c.width);x.drawImage(it.cv,0,0);return c;
+/* ---------- presets (300 dpi for ID photos) ---------- */
+const PRE=[
+ {id:'orig',g:'',t:'Original size'},
+ {id:'prod-sq',g:'Product',t:'Marketplace square 1000\u00d71000',w:1000,h:1000,kind:'product',opaque:1,hint:'White background is used unless you pick a color.'},
+ {id:'prod-amz',g:'Product',t:'High-res square 2000\u00d72000',w:2000,h:2000,kind:'product',opaque:1,hint:'White background is used unless you pick a color.'},
+ {id:'prod-45',g:'Product',t:'Portrait 4:5 1200\u00d71500',w:1200,h:1500,kind:'product',opaque:1,hint:'White background is used unless you pick a color.'},
+ {id:'id-35x45',g:'Passport / ID',t:'35\u00d745 mm (UK, EU, most countries)',w:413,h:531,kind:'passport',opaque:1,head:.74,top:.09,hint:'Needs a front-facing photo. Head is sized and centered automatically.'},
+ {id:'id-2x2',g:'Passport / ID',t:'2\u00d72 in (US)',w:600,h:600,kind:'passport',opaque:1,head:.60,top:.14,hint:'Needs a front-facing photo. Head is sized and centered automatically.'},
+ {id:'ig-sq',g:'Social',t:'Instagram post 1080\u00d71080',w:1080,h:1080,kind:'social'},
+ {id:'ig-45',g:'Social',t:'Instagram portrait 1080\u00d71350',w:1080,h:1350,kind:'social'},
+ {id:'story',g:'Social',t:'Story / WhatsApp status 1080\u00d71920',w:1080,h:1920,kind:'social'},
+ {id:'wa-dp',g:'Social',t:'Profile picture 640\u00d7640',w:640,h:640,kind:'social'},
+ {id:'fb-cover',g:'Social',t:'Facebook cover 1640\u00d7624',w:1640,h:624,kind:'social'},
+ {id:'x-header',g:'Social',t:'X header 1500\u00d7500',w:1500,h:500,kind:'social'},
+ {id:'yt-thumb',g:'Social',t:'YouTube thumbnail 1280\u00d7720',w:1280,h:720,kind:'social'},
+ {id:'li-banner',g:'Social',t:'LinkedIn banner 1584\u00d7396',w:1584,h:396,kind:'social'},
+ {id:'custom',g:'Custom',t:'Custom size...',kind:'custom'}
+];
+const preset=()=>PRE.find(p=>p.id===state.preset)||PRE[0];
+(()=>{const G={},o=p=>`<option value="${p.id}">${p.t}</option>`;PRE.forEach(p=>(G[p.g]=G[p.g]||[]).push(p));
+  $('#preset').innerHTML=Object.entries(G).map(([g,l])=>g?`<optgroup label="${g}">${l.map(o).join('')}</optgroup>`:l.map(o).join('')).join('')})();
+function setFit(v){state.fit=v;$('#fit').querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));$('#padbox').hidden=v!=='subject'}
+$('#preset').onchange=e=>{state.preset=e.target.value;const p=preset();
+  $('#customsz').hidden=p.id!=='custom';
+  $('#fitbox').hidden=!(p.w||p.id==='custom')||p.kind==='passport';
+  $('#sheetbox').hidden=p.kind!=='passport';
+  $('#presethint').textContent=p.hint||'';
+  setFit(p.kind==='product'?'subject':p.kind==='social'?'fill':'fit');
+  if(p.id!=='orig'&&state.mode!=='output')$('#mode [data-v=output]').click()};
+
+/* ---------- layout engine: where the subject lands inside the output ---------- */
+const mk=(w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;return c};
+const clampN=v=>Math.min(8000,Math.max(16,Math.round(+v)||1080));
+function analyze(it){ // subject bounds (alpha) from a small copy, in source pixels
+  const k=Math.min(1,512/Math.max(it.cv.width,it.cv.height)),w=Math.max(1,Math.round(it.cv.width*k)),h=Math.max(1,Math.round(it.cv.height*k));
+  const c=mk(w,h),x=c.getContext('2d',{willReadFrequently:true});x.drawImage(it.cv,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data,tops=new Float32Array(w).fill(h);let x0=w,y0=h,x1=-1,y1=-1;
+  for(let y=0;y<h;y++)for(let i=0;i<w;i++)if(d[(y*w+i)*4+3]>24){if(i<x0)x0=i;if(i>x1)x1=i;if(y<y0)y0=y;if(y>y1)y1=y;if(y<tops[i])tops[i]=y}
+  if(x1<0)return{x0:0,y0:0,x1:it.cv.width,y1:it.cv.height,topIn:()=>0};
+  return{x0:x0/k,y0:y0/k,x1:(x1+1)/k,y1:(y1+1)/k,
+    topIn:(a,b)=>{let m=h;for(let i=Math.max(0,Math.floor(a*k));i<=Math.min(w-1,Math.ceil(b*k));i++)if(tops[i]<m)m=tops[i];return m/k}}
 }
-const blobOf=it=>new Promise(r=>compose(it).toBlob(r,{png:'image/png',webp:'image/webp',jpg:'image/jpeg'}[state.fmt],state.fmt==='jpg'?.95:1));
+async function faceOf(it){
+  if(it.face===undefined){
+    try{const fd=new FormData();fd.append('file',it.file);const j=await(await fetch('/api/face',{method:'POST',body:fd})).json();it.face=j.found?j:null}
+    catch(e){it.face=null}
+    if(!it.face)toast(it.name+': no face found, framing was estimated.');
+  }
+  return it.face;
+}
+async function rectFor(it,p,W,H){
+  const sw=it.cv.width,sh=it.cv.height;
+  if(!p.w&&p.id!=='custom')return{dx:0,dy:0,dw:W,dh:H};
+  const bb=analyze(it),bw=bb.x1-bb.x0,bh=bb.y1-bb.y0;
+  if(p.kind==='passport'){
+    const f=await faceOf(it);let cx,crown,head;
+    if(f){cx=(f.x+f.w/2)*sw;const fh=f.h*sh,chin=(f.y+f.h)*sh,top=bb.topIn(cx-f.w*sw*.6,cx+f.w*sw*.6);
+      crown=top<chin?top:chin-fh*1.4;head=chin-crown;if(head<fh*1.1||head>fh*2){head=fh*1.45;crown=chin-head}}
+    else{cx=(bb.x0+bb.x1)/2;crown=bb.y0;head=Math.min(bw*.55,bh*.7)}
+    const s=p.head*H/head;return{dx:W/2-cx*s,dy:p.top*H-crown*s,dw:sw*s,dh:sh*s};
+  }
+  if(state.fit==='fit'){const s=Math.min(W/sw,H/sh);return{dx:(W-sw*s)/2,dy:(H-sh*s)/2,dw:sw*s,dh:sh*s}}
+  if(state.fit==='fill'){const s=Math.max(W/sw,H/sh),cx=(bb.x0+bb.x1)/2,cy=(bb.y0+bb.y1)/2;
+    return{dx:Math.min(0,Math.max(W-sw*s,W/2-cx*s)),dy:Math.min(0,Math.max(H-sh*s,H/2-cy*s)),dw:sw*s,dh:sh*s}}
+  const pad=+$('#pad').value/100,s=Math.min(W*(1-2*pad)/bw,H*(1-2*pad)/bh);
+  return{dx:W/2-(bb.x0+bw/2)*s,dy:H/2-(bb.y0+bh/2)*s,dw:sw*s,dh:sh*s};
+}
+
+/* ---------- watermark ---------- */
+const FONT='"Instrument Sans",system-ui,sans-serif';
+function drawWM(c){
+  if(!$('#wm').checked)return;
+  const W=c.width,H=c.height,x=c.getContext('2d'),tw=Math.max(8,W*(+$('#wmsize').value/100)),img=state.wmImg,t=$('#wmtext').value.trim();
+  if(!img&&!t)return;
+  x.save();x.globalAlpha=+$('#wmop').value/100;
+  let iw,ih,paint;
+  if(img){iw=tw;ih=tw*img.height/img.width;paint=(px,py)=>x.drawImage(img,px,py,iw,ih)}
+  else{x.font=`700 100px ${FONT}`;const fs=Math.min(100*tw/x.measureText(t).width,H*.25);x.font=`700 ${fs}px ${FONT}`;
+    iw=x.measureText(t).width;ih=fs*1.15;
+    paint=(px,py)=>{x.textBaseline='top';x.shadowColor='rgba(0,0,0,.55)';x.shadowBlur=fs*.12;x.fillStyle='#fff';x.fillText(t,px,py+fs*.07)}}
+  const pos=$('#wmpos').value,m=Math.min(W,H)*.03;
+  if(pos==='tile'){x.translate(W/2,H/2);x.rotate(-Math.PI/6);const gx=iw*1.6,gy=ih*3.2,span=Math.hypot(W,H);
+    for(let yy=-span;yy<span;yy+=gy)for(let xx=-span+(Math.round(yy/gy)%2)*gx/2;xx<span;xx+=gx)paint(xx,yy)}
+  else paint({l:m,c:(W-iw)/2,r:W-iw-m}[pos[1]],{t:m,m:(H-ih)/2,b:H-ih-m}[pos[0]]);
+  x.restore();
+}
+$('#wm').onchange=e=>{$('#wmbox').hidden=!e.target.checked};
+$('#wmlogo').onclick=()=>{if(state.wmImg){state.wmImg=null;$('#wmlogo').textContent='Logo';$('#wmtext').disabled=false;refresh()}else $('#wmfile').click()};
+$('#wmfile').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const im=new Image();
+  im.onload=()=>{state.wmImg=im;$('#wmlogo').textContent='Remove';$('#wmtext').disabled=true;refresh()};im.onerror=()=>toast('Could not read that logo.');im.src=URL.createObjectURL(f)};
+
+/* ---------- export ---------- */
+const MIME={png:'image/png',webp:'image/webp',jpg:'image/jpeg'};
+const isOpaque=()=>!!(state.bg||state.bgImg||preset().opaque);
+function effFmt(){let f=state.fmt;if($('#cmp').checked&&f==='png')f=isOpaque()?'jpg':'webp';return f}
+const tb=(c,m,q)=>new Promise(r=>c.toBlob(r,m,q));
+function sheetOf(photo){
+  const k=$('#sheet').value;if(!k)return photo;
+  const [A,B]=k==='a4'?[2480,3508]:[1200,1800],gap=16,m=30;
+  const grid=(w,h)=>{const cols=Math.max(0,Math.floor((w-2*m+gap)/(photo.width+gap))),rows=Math.max(0,Math.floor((h-2*m+gap)/(photo.height+gap)));return{cols,rows,w,h}};
+  const a=grid(A,B),b=grid(B,A),g=a.cols*a.rows>=b.cols*b.rows?a:b;
+  if(!g.cols||!g.rows)return photo;
+  const c=mk(g.w,g.h),x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,g.w,g.h);
+  const ox=(g.w-(g.cols*photo.width+(g.cols-1)*gap))/2,oy=(g.h-(g.rows*photo.height+(g.rows-1)*gap))/2;
+  x.strokeStyle='#c9c9c9';x.lineWidth=1;
+  for(let r=0;r<g.rows;r++)for(let i=0;i<g.cols;i++){const px=Math.round(ox+i*(photo.width+gap)),py=Math.round(oy+r*(photo.height+gap));
+    x.drawImage(photo,px,py);x.strokeRect(px-.5,py-.5,photo.width+1,photo.height+1)}
+  c.copies=g.cols*g.rows;return c;
+}
+async function composeFinal(it){
+  const p=preset(),fmt=effFmt(),opaque=p.opaque||fmt==='jpg';
+  let W=it.cv.width,H=it.cv.height;
+  if(p.id==='custom'){W=clampN($('#cw').value);H=clampN($('#ch').value)}else if(p.w){W=p.w;H=p.h}
+  const c=mk(W,H),x=c.getContext('2d');x.imageSmoothingQuality='high';
+  if(state.bgImg){const s=Math.max(W/state.bgImg.width,H/state.bgImg.height),w=state.bgImg.width*s,h=state.bgImg.height*s;x.drawImage(state.bgImg,(W-w)/2,(H-h)/2,w,h)}
+  else if(state.bg){x.fillStyle=state.bg;x.fillRect(0,0,W,H)}
+  else if(opaque){x.fillStyle='#fff';x.fillRect(0,0,W,H)}
+  const r=await rectFor(it,p,W,H);
+  x.filter=fx(r.dw);x.drawImage(it.cv,r.dx,r.dy,r.dw,r.dh);x.filter='none';
+  drawWM(c);
+  return p.kind==='passport'?sheetOf(c):c;
+}
+async function fitSize(c,mime,max){ // lower quality first, then shrink, until the file fits
+  const out=(b,cv,ok)=>({blob:b,w:cv.width,h:cv.height,ok});
+  let cv=c;
+  for(;;){
+    const hi=await tb(cv,mime,.92);if(hi.size<=max)return out(hi,cv,1);
+    const lo=await tb(cv,mime,.35);
+    if(lo.size<=max){let a=.35,b=.92,best=lo;for(let i=0;i<6;i++){const q=(a+b)/2,t=await tb(cv,mime,q);if(t.size<=max){best=t;a=q}else b=q}return out(best,cv,1)}
+    if(Math.max(cv.width,cv.height)<=240)return out(lo,cv,0);
+    const s=Math.min(.9,Math.max(.5,Math.sqrt(max/lo.size)*.95)),n=mk(Math.round(cv.width*s),Math.round(cv.height*s)),nx=n.getContext('2d');
+    nx.imageSmoothingQuality='high';nx.drawImage(cv,0,0,n.width,n.height);cv=n;
+  }
+}
+async function encode(c){
+  const fmt=effFmt(),mime=MIME[fmt];
+  if($('#cmp').checked&&fmt!=='png')return{...await fitSize(c,mime,Math.max(1,+$('#cmpkb').value||100)*1024),fmt};
+  return{blob:await tb(c,mime,fmt==='jpg'?.95:1),w:c.width,h:c.height,ok:1,fmt};
+}
+const blobOf=async it=>{const c=await composeFinal(it);return{...await encode(c),copies:c.copies}};
+const nameOf=(it,r)=>`${it.name}-${preset().id==='orig'?'pixelclip':preset().id}.${r.fmt}`;
+const kb=n=>n>=1048576?(n/1048576).toFixed(2)+' MB':Math.round(n/1024)+' KB';
 function save(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
-$('#dl').onclick=async()=>{const it=cur();save(await blobOf(it),`${it.name}-pixelclip.${state.fmt}`);toast('Downloaded')};
+$('#dl').onclick=async()=>{const it=cur(),r=await blobOf(it);save(r.blob,nameOf(it,r));
+  toast(r.ok?'Downloaded - '+kb(r.blob.size):'Smallest possible is '+kb(r.blob.size)+', above your limit.')};
 $('#dlall').onclick=async()=>{
-  const fd=new FormData();
-  for(const it of state.items)if(it.status==='done')fd.append('files',await blobOf(it),`${it.name}-pixelclip.${state.fmt}`);
-  const r=await fetch('/api/zip',{method:'POST',body:fd});save(await r.blob(),'pixelclip-images.zip');toast('Downloaded ZIP')};
+  const fd=new FormData();let miss=0;
+  for(const it of state.items)if(it.status==='done'){const r=await blobOf(it);if(!r.ok)miss++;fd.append('files',r.blob,nameOf(it,r))}
+  const r=await fetch('/api/zip',{method:'POST',body:fd});save(await r.blob(),'pixelclip-images.zip');
+  toast(miss?miss+' image(s) could not reach the size limit.':'Downloaded ZIP')};
+$('#cmp').onchange=e=>{$('#cmpbox').hidden=!e.target.checked};
+$('#kbq').onclick=e=>{const b=e.target.closest('button');if(!b)return;$('#cmpkb').value=b.dataset.kb;$('#cmpkb').dispatchEvent(new Event('input',{bubbles:true}))};
+
+/* ---------- output preview (exactly what you will download) ---------- */
+let rt,rseq=0;
+function refresh(){if(state.mode!=='output')return;clearTimeout(rt);rt=setTimeout(renderOut,120)}
+async function renderOut(){
+  const it=cur(),seq=++rseq,box=$('#out'),info=$('#outinfo');if(!it)return;
+  if(it.status!=='done'){box.style.display='none';info.textContent=it.status==='error'?'This image could not be processed.':'Waiting for the cutout...';return}
+  try{
+    const c=await composeFinal(it);if(seq!==rseq)return;
+    box.width=c.width;box.height=c.height;box.getContext('2d').drawImage(c,0,0);
+    const a=$('#stage'),k=Math.min(1,(a.clientWidth-48)/c.width,(a.clientHeight-48)/c.height);
+    box.style.width=c.width*k+'px';box.style.height=c.height*k+'px';box.style.display='block';
+    const r=await encode(c);if(seq!==rseq)return;
+    info.textContent=`${r.w}\u00d7${r.h} \u00b7 ${r.fmt.toUpperCase()} \u00b7 ${kb(r.blob.size)}`+(c.copies?` \u00b7 ${c.copies} photos`:'')+(r.ok?'':' \u00b7 above limit');
+  }catch(e){info.textContent='Could not build the preview.'}
+}
+document.querySelector('aside').addEventListener('input',()=>setTimeout(refresh));
+document.querySelector('aside').addEventListener('change',()=>setTimeout(refresh));
+document.querySelector('aside').addEventListener('click',()=>setTimeout(refresh));
 
 /* ---------- add from link ---------- */
 async function addUrl(){const u=$('#url').value.trim();if(!u)return;
