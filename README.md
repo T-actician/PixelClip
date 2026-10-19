@@ -23,6 +23,19 @@ Built for designers and developers who need cutouts without sending their work t
 - **Limit file size:** set a target such as 100 KB. Quality drops first, then dimensions, until it fits
 - **Output view:** shows exactly what you will download, with size, format, and file weight
 
+### Photo Lab (open it from the **Photo Lab** tab, or at `/lab`)
+- **Enhance:** one click for noise reduction, light and colour correction, sharpening, face restoration, and optional 2x/4x upscale
+- **Upscale:** 2x or 4x, natural-looking, no blocky edges
+- **Erase objects:** paint over a person, wire, sign or blemish and it is rebuilt from the surroundings
+- **Restore old photo:** repairs scratches and dust, reduces grain, restores faces, fixes fading, and can colorize black and white
+- **Portrait retouch:** skin smoothing that keeps texture, blemish removal, brighter eyes, whiter teeth
+- **Blur background:** soft or lens-style (bokeh) blur that grows with distance from the subject
+- **Hide faces / areas:** auto-blur or pixelate every face, plus anything you paint over (number plates, documents)
+- **Vectorize:** turn a logo or drawing into a scalable SVG
+- Every tool supports **Apply to all photos**, **Undo**, and a before/after slider. Finished photos can be sent straight to **Cutout**
+
+AI models download once, the first time a tool needs them, and are stored in `~/.pixelclip/models` (set `PIXELCLIP_MODELS` to change the folder). Sizes: face restorer 340 MB, object remover 208 MB, colorizer 980 MB, upscaler 2 MB, face finder 1 MB. Only one large model is kept in memory at a time.
+
 ## Quick start
 
 Requires Python 3.9 or newer.
@@ -85,6 +98,8 @@ The result is in `dist/PixelClip/`. Share that whole folder.
 ```
 PixelClip/
   app.py            FastAPI server, background removal, face finder
+  lab.py            Photo Lab engine (enhance, upscale, erase, restore, retouch, blur, privacy, vectorize)
+  lab.html          Photo Lab page
   index.html        The whole interface (HTML, CSS, JS)
   build.py          Standalone app builder
   requirements.txt  Python dependencies

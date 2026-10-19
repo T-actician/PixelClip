@@ -17,6 +17,10 @@ grid-template-areas:"top top" "stage panel" "strip panel";overflow:hidden}
 header{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line)}
 header b{font:800 22px var(--display);letter-spacing:-.02em}
 header span{color:var(--dim)}
+.nav{margin-left:auto;display:flex;gap:6px}
+.nav a{color:var(--dim);text-decoration:none;font-weight:600;padding:7px 12px;border-radius:10px;border:1px solid transparent}
+.nav a:hover{color:var(--chalk)}
+.nav a.on{color:var(--chalk);border-color:var(--line);background:var(--panel)}
 header .logo{width:22px;height:22px;border:2px dashed var(--cut);border-radius:6px}
 #stage{grid-area:stage;position:relative;display:grid;place-items:center;padding:24px;overflow:hidden;
 background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:32px 32px}
@@ -84,7 +88,8 @@ aside{border-left:0;border-top:1px solid var(--line)}}
 </style>
 </head>
 <body>
-<header><div class="logo"></div><b>PixelClip</b><span>Cut out, resize and prepare photos on your own machine</span></header>
+<header><div class="logo"></div><b>PixelClip</b><span>Cut out, resize and prepare photos on your own machine</span>
+  <nav class="nav"><a href="/" class="on">Cutout</a><a href="/lab">Photo Lab</a></nav></header>
 
 <main id="stage">
   <div id="drop" tabindex="0" role="button" aria-label="Choose images">
@@ -485,6 +490,12 @@ $('#file').onchange=e=>{addFiles(e.target.files);e.target.value=''};
 window.addEventListener('drop',e=>addFiles(e.dataTransfer.files));
 window.addEventListener('paste',e=>addFiles(e.clipboardData.files));
 window.addEventListener('resize',layout);
+
+/* ---------- photos sent over from the Photo Lab ---------- */
+(async()=>{try{const db=await new Promise((res,rej)=>{const r=indexedDB.open('pixelclip',1);r.onupgradeneeded=()=>r.result.createObjectStore('handoff');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+  const files=await new Promise(res=>{const q=db.transaction('handoff','readonly').objectStore('handoff').get('files');q.onsuccess=()=>res(q.result);q.onerror=()=>res(null)});
+  if(files&&files.length){await new Promise(res=>{const tx=db.transaction('handoff','readwrite');tx.objectStore('handoff').delete('files');tx.oncomplete=res;tx.onerror=res});
+    addFiles(files.map(f=>new File([f.blob],f.name,{type:f.blob.type||'image/png'})))}}catch(e){}})();
 </script>
 </body>
 </html>

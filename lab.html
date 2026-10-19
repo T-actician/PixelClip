@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>PixelClip - Photo Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--mat:#14222A;--grid:#1D313A;--panel:#101B21;--chalk:#E9F0F2;--dim:#8AA3AD;--cut:#FF4D8D;--line:#2A424C;
+--display:"Bricolage Grotesque",system-ui,sans-serif;--body:"Instrument Sans",system-ui,sans-serif}
+*{box-sizing:border-box;margin:0}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--mat);color:var(--chalk);font:500 14px/1.4 var(--body);display:grid;grid-template-columns:1fr 320px;grid-template-rows:56px 1fr 96px;
+grid-template-areas:"top top" "stage panel" "strip panel";overflow:hidden}
+header{grid-area:top;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line)}
+header b{font:800 22px var(--display);letter-spacing:-.02em}
+header span{color:var(--dim)}
+header .logo{width:22px;height:22px;border:2px dashed var(--cut);border-radius:6px}
+.nav{margin-left:auto;display:flex;gap:6px}
+.nav a{color:var(--dim);text-decoration:none;font-weight:600;padding:7px 12px;border-radius:10px;border:1px solid transparent}
+.nav a:hover{color:var(--chalk)}
+.nav a.on{color:var(--chalk);border-color:var(--line);background:var(--panel)}
+#stage{grid-area:stage;position:relative;display:grid;place-items:center;padding:24px;overflow:hidden;
+background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:32px 32px}
+#drop{width:min(640px,100%);aspect-ratio:16/9;display:grid;place-content:center;text-align:center;gap:14px;cursor:pointer;position:relative;border-radius:20px;transition:background .2s}
+#drop svg{position:absolute;inset:0;width:100%;height:100%}
+#drop rect{fill:none;stroke:var(--cut);stroke-width:2.5;stroke-dasharray:10 8;animation:march 1s linear infinite}
+@keyframes march{to{stroke-dashoffset:-18}}
+#drop.over{background:rgba(255,77,141,.1)}
+#drop h1{font:800 clamp(28px,4vw,46px)/1.05 var(--display);letter-spacing:-.03em;position:relative}
+#drop p{color:var(--dim);position:relative}
+.btn{font:600 14px var(--body);color:var(--chalk);background:transparent;border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer;transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--dim)}
+.btn.main{background:var(--cut);border-color:var(--cut);color:#1A0610;font-weight:700}
+.btn.main:hover{filter:brightness(1.1)}
+.btn:focus-visible,.seg button:focus-visible,.tool:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--chalk);outline-offset:2px}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+#viewer{display:none;width:100%;height:100%;place-items:center}
+#frame{position:relative;border-radius:6px;overflow:hidden;box-shadow:0 0 0 1px var(--line),0 30px 80px rgba(0,0,0,.45);touch-action:none;
+background:conic-gradient(#fff 25%,#d9dee0 0 50%,#fff 0 75%,#d9dee0 0) 0 0/20px 20px}
+#frame canvas,#frame img{position:absolute;inset:0;width:100%;height:100%;display:block}
+#prev{clip-path:inset(0 50% 0 0);pointer-events:none}
+#mask{opacity:.55;pointer-events:none}
+#frame.paint{cursor:none}
+#handle{position:absolute;top:0;bottom:0;left:50%;width:2px;background:var(--cut);cursor:ew-resize}
+#handle::after{content:"";position:absolute;top:50%;left:-13px;width:28px;height:28px;margin-top:-14px;border-radius:50%;background:var(--cut);box-shadow:0 0 0 4px rgba(255,77,141,.3)}
+#busy{position:absolute;inset:0;display:none;place-items:center;background:rgba(20,34,42,.72);z-index:6}
+#busy div{width:min(380px,86%);display:grid;gap:10px;text-align:center}
+#busy p{font:600 15px var(--display)}
+#busy i{display:block;height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+#busy b{display:block;height:100%;width:0;background:var(--cut);transition:width .3s linear}
+#ring{position:fixed;pointer-events:none;border:2px solid var(--cut);border-radius:50%;display:none;transform:translate(-50%,-50%);z-index:5}
+#tag{position:absolute;left:12px;bottom:12px;display:none;padding:6px 10px;border-radius:10px;background:rgba(16,27,33,.88);font:600 12px var(--body)}
+#strip{grid-area:strip;display:flex;gap:10px;padding:12px 20px;overflow-x:auto;border-top:1px solid var(--line)}
+.th{flex:none;width:96px;height:72px;border-radius:8px;border:2px solid transparent;position:relative;overflow:hidden;cursor:pointer;background:#000;padding:0}
+.th img{width:100%;height:100%;object-fit:cover;opacity:.85}
+.th.on{border-color:var(--cut)}
+.th i{position:absolute;right:4px;bottom:4px;font:600 11px var(--body);font-style:normal;background:rgba(0,0,0,.7);padding:2px 6px;border-radius:6px}
+.th u{position:absolute;left:4px;top:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.7);color:var(--chalk);text-decoration:none;font:700 12px/20px var(--body);text-align:center}
+aside{grid-area:panel;background:var(--panel);border-left:1px solid var(--line);padding:18px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
+aside h2{font:600 13px var(--body);color:var(--dim);margin-bottom:8px}
+.tools{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tool{background:none;border:1px solid var(--line);border-radius:10px;color:var(--dim);font:600 13px var(--body);padding:10px 8px;cursor:pointer;text-align:left}
+.tool:hover{color:var(--chalk);border-color:var(--dim)}
+.tool.on{background:var(--chalk);color:#10181C;border-color:var(--chalk)}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.seg button{background:none;border:0;color:var(--dim);font:600 13px var(--body);padding:8px 4px;cursor:pointer}
+.seg button.on{background:var(--chalk);color:#10181C}
+.row{display:flex;align-items:center;gap:10px}
+.stack{display:grid;gap:12px}
+input[type=range]{width:100%;accent-color:var(--cut)}
+label.chk{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+label.chk small{display:block;color:var(--dim);font-weight:400}
+.hint{color:var(--dim);font-weight:400;font-size:13px}
+.lab{display:flex;justify-content:space-between;color:var(--dim);font-weight:400;font-size:13px;margin-bottom:4px}
+.push{margin-top:auto;display:grid;gap:10px}
+.chips{display:flex;gap:6px;margin-top:8px}.chips .btn{flex:1;padding:6px 0;font-size:12px}
+#toast{position:fixed;bottom:112px;left:24px;max-width:60vw;background:var(--chalk);color:#10181C;padding:10px 14px;border-radius:10px;font-weight:600;display:none;z-index:9}
+input[type=number],select{flex:1;min-width:0;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--chalk);padding:9px 10px;font:500 14px var(--body)}
+select{width:100%;background:var(--panel)}
+</style>
+</head>
+<body>
+<header><div class="logo"></div><b>PixelClip</b><span>Photo Lab</span>
+  <nav class="nav"><a href="/">Cutout</a><a href="/lab" class="on">Photo Lab</a></nav></header>
+
+<main id="stage">
+  <div id="drop" tabindex="0" role="button" aria-label="Choose photos">
+    <svg><rect x="2" y="2" width="calc(100% - 4px)" height="calc(100% - 4px)" rx="18"/></svg>
+    <h1>Drop photos here</h1>
+    <p>or click to choose. Enhance, upscale, erase, restore and more, all on your computer.</p>
+  </div>
+  <div id="viewer">
+    <div id="frame">
+      <img id="cur" alt="Current photo" draggable="false">
+      <img id="prev" alt="Previous version" draggable="false">
+      <canvas id="mask"></canvas>
+      <div id="handle" role="slider" aria-label="Compare before and after" tabindex="0"></div>
+      <div id="busy"><div><p id="busymsg">Working...</p><i><b id="busybar"></b></i></div></div>
+    </div>
+  </div>
+  <div id="tag"></div>
+</main>
+
+<div id="strip" aria-label="Photos"></div>
+<div id="ring"></div>
+
+<aside>
+  <section><h2>Tool</h2>
+    <div class="tools" id="tools">
+      <button class="tool on" data-t="enhance">Enhance</button>
+      <button class="tool" data-t="upscale">Upscale</button>
+      <button class="tool" data-t="erase">Erase objects</button>
+      <button class="tool" data-t="restore">Restore old photo</button>
+      <button class="tool" data-t="retouch">Portrait retouch</button>
+      <button class="tool" data-t="blurbg">Blur background</button>
+      <button class="tool" data-t="privacy">Hide faces / areas</button>
+      <button class="tool" data-t="vectorize">Vectorize</button>
+    </div>
+  </section>
+
+  <section class="stack" data-p="enhance">
+    <p class="hint">Cleans noise, fixes light and colour, sharpens, and brings faces back to life.</p>
+    <div><h2>Strength</h2><div class="seg" id="enh-str"><button data-v="natural">Natural</button><button data-v="strong" class="on">Strong</button></div></div>
+    <label class="chk"><input type="checkbox" id="enh-tone" checked><span>Light &amp; colour</span></label>
+    <label class="chk"><input type="checkbox" id="enh-den" checked><span>Reduce noise</span></label>
+    <label class="chk"><input type="checkbox" id="enh-sharp" checked><span>Sharpen</span></label>
+    <label class="chk"><input type="checkbox" id="enh-faces" checked><span>Restore faces<small>Fixes blurry or damaged faces.</small></span></label>
+    <div><h2>Upscale</h2><div class="seg" id="enh-up"><button data-v="0" class="on">Off</button><button data-v="2">2x</button><button data-v="4">4x</button></div></div>
+  </section>
+
+  <section class="stack" data-p="upscale" hidden>
+    <p class="hint">Makes small or soft photos bigger and sharper without the blocky look.</p>
+    <div><h2>Size</h2><div class="seg" id="up-scale"><button data-v="2" class="on">2x</button><button data-v="4">4x</button></div></div>
+    <label class="chk"><input type="checkbox" id="up-faces"><span>Restore faces too</span></label>
+    <p class="hint">Results are capped at 8000 px on the long side.</p>
+  </section>
+
+  <section class="stack" data-p="erase" hidden>
+    <p class="hint">Paint over what you want gone (a person, wire, sign, blemish), then press Remove.</p>
+  </section>
+
+  <section class="stack" data-p="restore" hidden>
+    <p class="hint">Repairs old, faded or damaged photos.</p>
+    <label class="chk"><input type="checkbox" id="rs-scr" checked><span>Repair scratches &amp; dust<small>Works best on marks over smooth areas.</small></span></label>
+    <label class="chk"><input type="checkbox" id="rs-faces" checked><span>Restore faces</span></label>
+    <label class="chk"><input type="checkbox" id="rs-tone" checked><span>Fix fading &amp; contrast</span></label>
+    <label class="chk"><input type="checkbox" id="rs-col"><span>Colorize black &amp; white<small>Colours are the AI's best guess.</small></span></label>
+    <div><h2>Upscale</h2><div class="seg" id="rs-up"><button data-v="0" class="on">Off</button><button data-v="2">2x</button><button data-v="4">4x</button></div></div>
+  </section>
+
+  <section class="stack" data-p="retouch" hidden>
+    <p class="hint">Natural-looking touch-ups for front-facing portraits.</p>
+    <div><div class="lab"><span>Skin smoothing</span><span id="rt-skin-v">55</span></div><input type="range" id="rt-skin" min="0" max="100" value="55"></div>
+    <div><div class="lab"><span>Brighten eyes</span><span id="rt-eyes-v">40</span></div><input type="range" id="rt-eyes" min="0" max="100" value="40"></div>
+    <div><div class="lab"><span>Whiten teeth</span><span id="rt-teeth-v">40</span></div><input type="range" id="rt-teeth" min="0" max="100" value="40"></div>
+    <label class="chk"><input type="checkbox" id="rt-blem" checked><span>Remove small blemishes</span></label>
+  </section>
+
+  <section class="stack" data-p="blurbg" hidden>
+    <p class="hint">Keeps the subject sharp and blurs everything behind it, like a portrait-mode lens.</p>
+    <div><div class="lab"><span>Blur amount</span><span id="bl-amt-v">60</span></div><input type="range" id="bl-amt" min="10" max="100" value="60"></div>
+    <div><h2>Style</h2><div class="seg" id="bl-style"><button data-v="soft" class="on">Soft</button><button data-v="lens">Lens (bokeh)</button></div></div>
+  </section>
+
+  <section class="stack" data-p="privacy" hidden>
+    <p class="hint">Hide faces, number plates, documents or anything private. Paint over areas to hide them too.</p>
+    <label class="chk"><input type="checkbox" id="pv-faces" checked><span>Hide all faces automatically</span></label>
+    <div><h2>Style</h2><div class="seg" id="pv-mode"><button data-v="blur" class="on">Blur</button><button data-v="pixelate">Pixelate</button></div></div>
+  </section>
+
+  <section class="stack" data-p="vectorize" hidden>
+    <p class="hint">Turns a logo or drawing into a scalable SVG you can resize without losing quality.</p>
+    <div><h2>Type</h2><select id="vt-preset"><option value="logo">Logo (few flat colours)</option><option value="illustration">Illustration (more detail)</option><option value="bw">Black &amp; white line art</option></select></div>
+  </section>
+
+  <section id="brushbox" hidden>
+    <h2>Brush size</h2>
+    <input type="range" id="bsize" min="6" max="120" value="36">
+    <div class="row" style="margin-top:8px"><button class="btn" id="clearmask" style="flex:1">Clear selection</button></div>
+  </section>
+
+  <section class="stack">
+    <p class="hint" id="need"></p>
+    <label class="chk" id="allbox"><input type="checkbox" id="all"><span>Apply to all photos<small>Runs the tool on every photo in the strip.</small></span></label>
+    <button class="btn main" id="apply">Apply</button>
+    <div class="row"><button class="btn" id="undo" style="flex:1" disabled>Undo</button><button class="btn" id="reset" style="flex:1" disabled>Original</button></div>
+  </section>
+
+  <section class="push">
+    <div id="fmtbox"><h2>Format</h2><div class="seg" id="fmt"><button data-v="png" class="on">PNG</button><button data-v="jpg">JPG</button><button data-v="webp">WebP</button></div>
+      <label class="chk" style="margin-top:12px"><input type="checkbox" id="cmp"><span>Limit file size<small>Lowers quality, then size, until it fits.</small></span></label>
+      <div id="cmpbox" hidden><div class="row" style="margin-top:8px"><span class="hint" style="flex:none">Under</span><input type="number" id="cmpkb" min="5" max="20000" value="200" aria-label="Maximum size in KB"><span class="hint">KB</span></div>
+        <div class="chips" id="kbq"><button class="btn" data-kb="50">50</button><button class="btn" data-kb="100">100</button><button class="btn" data-kb="200">200</button><button class="btn" data-kb="500">500</button></div></div>
+    </div>
+    <button class="btn main" id="dl" disabled>Download image</button>
+    <button class="btn" id="dlall" disabled>Download all as ZIP</button>
+    <button class="btn" id="tocut" disabled>Send to Cutout (remove background)</button>
+    <button class="btn" id="add">Add photos</button>
+    <input type="file" id="file" accept="image/*" multiple hidden>
+  </section>
+</aside>
+<div id="toast" role="status"></div>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const state={items:[],cur:-1,tool:'enhance',pos:.5,busy:false,models:{}};
+const TOOLS={enhance:{},upscale:{},erase:{mask:true,label:'Remove'},restore:{},retouch:{},blurbg:{},privacy:{mask:true},vectorize:{svg:true,label:'Vectorize'}};
+const LABEL={enhance:'Enhance',upscale:'Upscale',erase:'Remove object',restore:'Restore',retouch:'Retouch',blurbg:'Blur background',privacy:'Hide',vectorize:'Vectorize'};
+const cur=()=>state.items[state.cur];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const stem=n=>n.replace(/\.[^.]+$/,'')||'photo';
+let tt;function toast(t){const e=$('#toast');e.textContent=t;e.style.display='block';clearTimeout(tt);tt=setTimeout(()=>e.style.display='none',5200)}
+const val=id=>$('#'+id+' .on').dataset.v;
+const kb=n=>n>=1048576?(n/1048576).toFixed(2)+' MB':Math.round(n/1024)+' KB';
+
+/* ---------- small UI helpers ---------- */
+$$('.seg').forEach(g=>g.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;g.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));needs()}));
+$$('input[type=range]').forEach(r=>{const v=$('#'+r.id+'-v');if(v)r.addEventListener('input',()=>v.textContent=r.value)});
+$$('input[type=checkbox]').forEach(c=>c.addEventListener('change',needs));
+$('#cmp').onchange=e=>$('#cmpbox').hidden=!e.target.checked;
+$('#kbq').onclick=e=>{const b=e.target.closest('button');if(b)$('#cmpkb').value=b.dataset.kb};
+
+/* ---------- tools ---------- */
+$('#tools').onclick=e=>{const b=e.target.closest('.tool');if(!b)return;state.tool=b.dataset.t;
+  $$('.tool').forEach(x=>x.classList.toggle('on',x===b));$$('[data-p]').forEach(s=>s.hidden=s.dataset.p!==state.tool);
+  const T=TOOLS[state.tool];$('#brushbox').hidden=!T.mask;$('#allbox').hidden=!!T.mask;
+  $('#apply').textContent=T.label||'Apply';$('#frame').classList.toggle('paint',!!T.mask);
+  $('#fmtbox').hidden=!!T.svg;$('#dl').textContent=T.svg?'Download SVG':'Download image';$('#dlall').hidden=!!T.svg;
+  needs();if(cur())show()};
+
+function params(){
+  switch(state.tool){
+    case 'enhance':return{strength:val('enh-str'),tone:$('#enh-tone').checked,denoise:$('#enh-den').checked,sharpen:$('#enh-sharp').checked,faces:$('#enh-faces').checked,upscale:+val('enh-up')};
+    case 'upscale':return{scale:+val('up-scale'),faces:$('#up-faces').checked};
+    case 'restore':return{scratches:$('#rs-scr').checked,faces:$('#rs-faces').checked,tone:$('#rs-tone').checked,colorize:$('#rs-col').checked,upscale:+val('rs-up')};
+    case 'retouch':return{skin:$('#rt-skin').value/100,eyes:$('#rt-eyes').value/100,teeth:$('#rt-teeth').value/100,blemish:$('#rt-blem').checked};
+    case 'blurbg':return{amount:$('#bl-amt').value/100,style:val('bl-style')};
+    case 'privacy':return{faces:$('#pv-faces').checked,mode:val('pv-mode')};
+    case 'vectorize':return{preset:$('#vt-preset').value};
+    default:return{};
+  }
+}
+const NEEDS={enhance:p=>[...(p.upscale?['upscale']:[]),...(p.faces?['detect','face']:[])],upscale:p=>['upscale',...(p.faces?['detect','face']:[])],
+  erase:()=>['lama'],restore:p=>[...(p.scratches?['detect','lama']:[]),...(p.colorize?['color']:[]),...(p.upscale?['upscale']:[]),...(p.faces?['detect','face']:[])],
+  retouch:()=>['detect'],blurbg:()=>[],privacy:p=>p.faces?['detect']:[],vectorize:()=>[]};
+function needs(){const keys=[...new Set(NEEDS[state.tool](params()))].filter(k=>state.models[k]&&!state.models[k].ready);
+  const mb=keys.reduce((a,k)=>a+state.models[k].mb,0);
+  $('#need').textContent=mb?`First use downloads about ${mb} MB of AI models. This happens once.`:(state.tool==='blurbg'?'The first use downloads a small background model.':'')}
+fetch('/api/lab/models').then(r=>r.json()).then(m=>{state.models=m;needs()}).catch(()=>{});
+
+/* ---------- adding photos ---------- */
+function addFiles(list){const fs=[...list].filter(f=>f.type.startsWith('image/'));if(!fs.length){toast('Those files are not images.');return}
+  for(const f of fs)state.items.push({name:f.name||'photo.png',orig:f,file:f,url:URL.createObjectURL(f),prevUrl:'',history:[],vec:null});
+  select(state.items.length-fs.length)}
+$('#drop').onclick=()=>$('#file').click();$('#add').onclick=()=>$('#file').click();
+$('#drop').onkeydown=e=>{if(e.key==='Enter'||e.key===' ')$('#file').click()};
+$('#file').onchange=e=>{addFiles(e.target.files);e.target.value=''};
+['dragover','dragenter'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('#drop').classList.add('over')}));
+['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();$('#drop').classList.remove('over')}));
+document.addEventListener('drop',e=>{if(e.dataTransfer.files.length)addFiles(e.dataTransfer.files)});
+document.addEventListener('paste',e=>{const fs=[...(e.clipboardData?.files||[])];if(fs.length)addFiles(fs)});
+
+function select(i){state.cur=i;const has=!!cur();$('#drop').style.display=has?'none':'grid';$('#viewer').style.display=has?'grid':'none';
+  ['dl','dlall','tocut'].forEach(k=>$('#'+k).disabled=!has);clearMask();show();strip()}
+function strip(){$('#strip').innerHTML='';state.items.forEach((it,i)=>{const b=document.createElement('button');b.className='th'+(i===state.cur?' on':'');
+  b.innerHTML=`<img src="${it.url}" alt=""><u title="Remove">&times;</u>${it.history.length?'<i>edited</i>':''}`;
+  b.onclick=e=>{if(e.target.closest('u')){remove(i);return}select(i)};$('#strip').append(b)})}
+function remove(i){state.items.splice(i,1);select(Math.min(state.cur>i?state.cur-1:state.cur,state.items.length-1))}
+
+/* ---------- viewer ---------- */
+const curImg=$('#cur'),prevImg=$('#prev'),frame=$('#frame'),mcv=$('#mask'),mctx=mcv.getContext('2d');
+const dcv=document.createElement('canvas'),dctx=dcv.getContext('2d');
+let nat={w:1,h:1},hasMask=false;
+function show(){const it=cur();if(!it)return;const vec=TOOLS[state.tool].svg&&it.vec;
+  curImg.onload=()=>{nat={w:curImg.naturalWidth||1,h:curImg.naturalHeight||1};layout()};
+  curImg.src=vec?it.vec.url:it.url;prevImg.src=vec?it.url:(it.prevUrl||'');
+  $('#undo').disabled=!it.history.length;$('#reset').disabled=!it.history.length&&!it.vec;
+  const tag=$('#tag');tag.style.display='block';tag.textContent=vec?'SVG preview':(it.prevUrl?'Drag the handle to compare':'')||'';if(!tag.textContent)tag.style.display='none'}
+function layout(){const it=cur();if(!it)return;const s=$('#stage'),k=Math.min((s.clientWidth-48)/nat.w,(s.clientHeight-48)/nat.h,2);
+  frame.style.width=Math.max(40,nat.w*k)+'px';frame.style.height=Math.max(40,nat.h*k)+'px';
+  const T=TOOLS[state.tool],vec=T.svg&&it.vec,cmp=!T.mask&&(vec||it.prevUrl);
+  prevImg.style.display=cmp?'block':'none';$('#handle').style.display=cmp?'block':'none';mcv.style.display=T.mask?'block':'none';
+  if(mcv.width!==nat.w||mcv.height!==nat.h){mcv.width=dcv.width=nat.w;mcv.height=dcv.height=nat.h;clearMask()}setPos(state.pos)}
+addEventListener('resize',layout);
+function setPos(p){state.pos=Math.min(1,Math.max(0,p));prevImg.style.clipPath=`inset(0 ${100-state.pos*100}% 0 0)`;$('#handle').style.left=state.pos*100+'%'}
+let dragH=false;$('#handle').onpointerdown=e=>{dragH=true;$('#handle').setPointerCapture(e.pointerId);e.stopPropagation()};
+$('#handle').onpointermove=e=>{if(dragH){const r=frame.getBoundingClientRect();setPos((e.clientX-r.left)/r.width)}};
+$('#handle').onpointerup=()=>dragH=false;
+$('#handle').onkeydown=e=>{if(e.key==='ArrowLeft')setPos(state.pos-.05);if(e.key==='ArrowRight')setPos(state.pos+.05)};
+
+/* ---------- selection brush (erase / hide) ---------- */
+function clearMask(){hasMask=false;mctx.clearRect(0,0,mcv.width,mcv.height);dctx.fillStyle='#000';dctx.fillRect(0,0,dcv.width,dcv.height)}
+$('#clearmask').onclick=clearMask;
+const ring=$('#ring');let painting=false,last=null;
+const brushPx=()=>+$('#bsize').value;
+function pt(e){const r=frame.getBoundingClientRect();return{x:(e.clientX-r.left)*nat.w/r.width,y:(e.clientY-r.top)*nat.h/r.height}}
+function stroke(a,b){const lw=brushPx()*nat.w/frame.getBoundingClientRect().width;
+  for(const [c,col] of [[mctx,'#FF4D8D'],[dctx,'#fff']]){c.lineCap=c.lineJoin='round';c.lineWidth=lw;c.strokeStyle=col;c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x+.01,b.y);c.stroke()}hasMask=true}
+frame.addEventListener('pointerdown',e=>{if(!TOOLS[state.tool].mask||state.busy||e.target.id==='handle')return;painting=true;frame.setPointerCapture(e.pointerId);last=pt(e);stroke(last,last)});
+frame.addEventListener('pointermove',e=>{if(!TOOLS[state.tool].mask)return;
+  ring.style.display='block';ring.style.left=e.clientX+'px';ring.style.top=e.clientY+'px';ring.style.width=ring.style.height=brushPx()+'px';
+  if(painting){const p=pt(e);stroke(last,p);last=p}});
+frame.addEventListener('pointerup',()=>painting=false);
+frame.addEventListener('pointerleave',()=>{ring.style.display='none'});
+
+/* ---------- running a tool ---------- */
+function busy(on,msg,pct){state.busy=on;$('#busy').style.display=on?'grid':'none';['apply','undo','reset','dl','dlall','tocut'].forEach(k=>$('#'+k).disabled=on||(k==='undo'||k==='reset'?true:!cur()));
+  if(msg!==undefined)$('#busymsg').textContent=msg;if(pct!==undefined)$('#busybar').style.width=pct+'%'}
+async function runTool(it,tool,p,maskBlob,label){
+  const fd=new FormData();fd.append('tool',tool);fd.append('file',it.file,it.file.name||'photo.png');fd.append('params',JSON.stringify(p));
+  if(maskBlob)fd.append('mask',maskBlob,'mask.png');
+  const r=await fetch('/api/lab/run',{method:'POST',body:fd});
+  if(!r.ok){let m='That did not work.';try{m=(await r.json()).detail||m}catch(e){}throw new Error(m)}
+  const {job}=await r.json();
+  let fails=0;
+  for(;;){await sleep(400);let s;
+    try{s=await(await fetch('/api/lab/job/'+job)).json();fails=0}catch(e){if(++fails>5)throw new Error('Lost contact with PixelClip. Is it still running?');continue}
+    busy(true,(label?label+': ':'')+s.msg,s.pct);
+    if(s.state==='error')throw new Error(s.error||'That did not work.');
+    if(s.state==='done'){const blob=await(await fetch('/api/lab/result/'+job)).blob();return{blob,note:s.note}}}
+}
+function commit(it,blob){it.history.push({file:it.file,url:it.url,prevUrl:it.prevUrl});
+  it.file=new File([blob],stem(it.name)+'.png',{type:'image/png'});it.prevUrl=it.url;it.url=URL.createObjectURL(blob);it.vec=null}
+$('#apply').onclick=async()=>{
+  const tool=state.tool,T=TOOLS[tool],it0=cur();if(!it0||state.busy)return;
+  if(tool==='erase'&&!hasMask){toast('Paint over the object you want to remove first.');return}
+  if(tool==='privacy'&&!hasMask&&!$('#pv-faces').checked){toast('Turn on face hiding or paint an area first.');return}
+  const list=$('#all').checked&&!T.mask?state.items.slice():[it0],p=params();let notes=[];
+  let maskBlob=null;if(T.mask&&hasMask)maskBlob=await new Promise(r=>dcv.toBlob(r,'image/png'));
+  busy(true,'Starting...',0);
+  try{
+    for(let i=0;i<list.length;i++){const it=list[i],lbl=list.length>1?`Photo ${i+1} of ${list.length}`:'';
+      const res=await runTool(it,tool,p,it===it0?maskBlob:null,lbl);
+      if(T.svg){it.vec={url:URL.createObjectURL(res.blob),blob:res.blob}}else commit(it,res.blob);
+      if(res.note)notes.push(res.note)}
+    if(T.mask)clearMask();
+    toast(notes.length?notes[0]:(LABEL[tool]+' done'+(list.length>1?' for '+list.length+' photos.':'.')));
+  }catch(e){toast(e.message)}
+  finally{busy(false);select(state.cur)}
+};
+$('#undo').onclick=()=>{const it=cur();if(!it||!it.history.length)return;const h=it.history.pop();URL.revokeObjectURL(it.url);it.file=h.file;it.url=h.url;it.prevUrl=h.prevUrl||'';it.vec=null;select(state.cur)};
+$('#reset').onclick=()=>{const it=cur();if(!it)return;it.vec=null;if(it.history.length){it.file=it.orig;it.url=it.history[0].url;it.history=[];it.prevUrl=''}select(state.cur)};
+
+/* ---------- export ---------- */
+const MIME={png:'image/png',jpg:'image/jpeg',webp:'image/webp'};
+const tb=(c,m,q)=>new Promise(r=>c.toBlob(r,m,q));
+async function fitSize(c,mime,max){const out=(b,cv,ok)=>({blob:b,ok});let cv=c;
+  for(;;){const hi=await tb(cv,mime,.92);if(hi.size<=max)return out(hi,cv,1);const lo=await tb(cv,mime,.35);
+    if(lo.size<=max){let a=.35,b=.92,best=lo;for(let i=0;i<6;i++){const q=(a+b)/2,t=await tb(cv,mime,q);if(t.size<=max){best=t;a=q}else b=q}return out(best,cv,1)}
+    if(Math.max(cv.width,cv.height)<=240)return out(lo,cv,0);
+    const s=Math.min(.9,Math.max(.5,Math.sqrt(max/lo.size)*.95)),n=document.createElement('canvas');n.width=Math.round(cv.width*s);n.height=Math.round(cv.height*s);
+    const x=n.getContext('2d');x.imageSmoothingQuality='high';x.drawImage(cv,0,0,n.width,n.height);cv=n}}
+async function encode(it){
+  let fmt=val('fmt');const lim=$('#cmp').checked,max=Math.max(1,+$('#cmpkb').value||200)*1024;
+  if(lim&&fmt==='png')fmt='jpg';
+  if(!lim&&!it.history.length&&it.orig.type===MIME[fmt])return{blob:it.orig,fmt,ok:1};   // untouched original: no re-encode
+  const bmp=await createImageBitmap(it.file),c=document.createElement('canvas');c.width=bmp.width;c.height=bmp.height;const x=c.getContext('2d');
+  if(fmt==='jpg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}x.drawImage(bmp,0,0);
+  if(lim)return{...await fitSize(c,MIME[fmt],max),fmt};
+  return{blob:await tb(c,MIME[fmt],fmt==='jpg'?.95:1),fmt,ok:1};
+}
+function save(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
+$('#dl').onclick=async()=>{const it=cur();if(!it)return;
+  if(TOOLS[state.tool].svg){if(!it.vec){toast('Press Vectorize first.');return}save(it.vec.blob,stem(it.name)+'.svg');toast('Downloaded SVG');return}
+  const r=await encode(it);save(r.blob,`${stem(it.name)}${it.history.length?'-lab':''}.${r.fmt}`);
+  toast(r.ok?'Downloaded - '+kb(r.blob.size):'Smallest possible is '+kb(r.blob.size)+', above your limit.')};
+$('#dlall').onclick=async()=>{const fd=new FormData();let miss=0;
+  for(const it of state.items){const r=await encode(it);if(!r.ok)miss++;fd.append('files',r.blob,`${stem(it.name)}${it.history.length?'-lab':''}.${r.fmt}`)}
+  const r=await fetch('/api/zip',{method:'POST',body:fd});save(await r.blob(),'pixelclip-lab.zip');
+  toast(miss?miss+' photo(s) could not reach the size limit.':'Downloaded ZIP')};
+
+/* ---------- hand a photo to the background remover ---------- */
+const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open('pixelclip',1);r.onupgradeneeded=()=>r.result.createObjectStore('handoff');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+$('#tocut').onclick=async()=>{try{const files=state.items.map(it=>({name:it.name,blob:it.file}));const db=await idb();
+  await new Promise((ok,no)=>{const tx=db.transaction('handoff','readwrite');tx.objectStore('handoff').put(files,'files');tx.oncomplete=ok;tx.onerror=()=>no(tx.error)});location.href='/'}
+  catch(e){toast('Could not hand the photos over. Download them and drop them into Cutout.')}};
+
+/* ---------- start ---------- */
+$('#tools').onclick({target:$('.tool.on')});
+</script>
+</body>
+</html>

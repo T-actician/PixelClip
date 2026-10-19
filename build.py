@@ -15,10 +15,12 @@ PyInstaller.__main__.run([
     "--noconfirm",
     "--onedir",
     "--add-data", f"index.html{os.pathsep}.",
+    "--add-data", f"lab.html{os.pathsep}.",
     "--collect-all", "rembg",
     "--collect-all", "pymatting",
     "--collect-all", "onnxruntime",
     "--collect-all", "numba",
     "--collect-all", "llvmlite",
     "--collect-all", "cv2",
+    "--collect-all", "vtracer",
 ])

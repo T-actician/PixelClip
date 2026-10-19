@@ -1,4 +1,4 @@
-"""PixelClip - photo toolkit (background removal, ID photos, resizing). Run: python app.py"""
+"""PixelClip - photo toolkit (cutouts, ID photos, resizing, Photo Lab). Run: python app.py"""
 import io, ipaddress, socket, sys, threading, urllib.parse, urllib.request, webbrowser, zipfile
 from pathlib import Path
 from typing import List
@@ -11,6 +11,8 @@ from PIL import Image, ImageOps
 from pymatting import estimate_foreground_ml
 from rembg import new_session, remove
 from scipy import ndimage as ndi
+
+import lab  # Photo Lab: enhance, upscale, erase, restore, retouch, blur, privacy, vectorize
 
 try:  # face detection for the passport/ID tool (optional: the rest works without it)
     import cv2
@@ -62,6 +64,21 @@ def refine(img: Image.Image, mask: Image.Image, soft: bool = False) -> Image.Ima
     out = np.dstack([np.clip(rgb, 0, 1), a])
     out[a == 0, :3] = 0
     return Image.fromarray((out * 255 + 0.5).astype(np.uint8), "RGBA")
+
+
+def _subject_mask(rgb):
+    """Subject mask (0-1, subject = 1) for the Photo Lab's background blur."""
+    m = remove(Image.fromarray(rgb), session=session_for("balanced"), only_mask=True, post_process_mask=True)
+    return np.asarray(m.convert("L"), dtype=np.float32) / 255.0
+
+
+lab.bg_mask = _subject_mask
+app.include_router(lab.router)
+
+
+@app.get("/lab")
+def lab_page():
+    return FileResponse(HERE / "lab.html")
 
 
 @app.get("/")
