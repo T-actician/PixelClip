@@ -124,6 +124,8 @@ select{width:100%;background:var(--panel)}
   <section class="stack" data-p="enhance">
     <p class="hint">Cleans noise, fixes light and colour, sharpens, and brings faces back to life.</p>
     <div><h2>Strength</h2><div class="seg" id="enh-str"><button data-v="natural">Natural</button><button data-v="strong" class="on">Strong</button></div></div>
+    <label class="chk"><input type="checkbox" id="enh-haze" checked><span>Remove haze &amp; fading<small>Lifts the washed-out, foggy look.</small></span></label>
+    <label class="chk"><input type="checkbox" id="enh-deblur" checked><span>Remove blur<small>Sharpens soft or out-of-focus photos without inventing detail.</small></span></label>
     <label class="chk"><input type="checkbox" id="enh-tone" checked><span>Light &amp; colour</span></label>
     <label class="chk"><input type="checkbox" id="enh-den" checked><span>Reduce noise</span></label>
     <label class="chk"><input type="checkbox" id="enh-sharp" checked><span>Sharpen</span></label>
@@ -233,7 +235,7 @@ $('#tools').onclick=e=>{const b=e.target.closest('.tool');if(!b)return;state.too
 
 function params(){
   switch(state.tool){
-    case 'enhance':return{strength:val('enh-str'),tone:$('#enh-tone').checked,denoise:$('#enh-den').checked,sharpen:$('#enh-sharp').checked,faces:$('#enh-faces').checked,upscale:+val('enh-up')};
+    case 'enhance':return{strength:val('enh-str'),tone:$('#enh-tone').checked,dehaze:$('#enh-haze').checked,deblur:$('#enh-deblur').checked,denoise:$('#enh-den').checked,sharpen:$('#enh-sharp').checked,faces:$('#enh-faces').checked,upscale:+val('enh-up')};
     case 'upscale':return{scale:+val('up-scale'),faces:$('#up-faces').checked};
     case 'restore':return{scratches:$('#rs-scr').checked,faces:$('#rs-faces').checked,tone:$('#rs-tone').checked,colorize:$('#rs-col').checked,upscale:+val('rs-up')};
     case 'retouch':return{skin:$('#rt-skin').value/100,eyes:$('#rt-eyes').value/100,teeth:$('#rt-teeth').value/100,blemish:$('#rt-blem').checked};

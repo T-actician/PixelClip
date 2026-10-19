@@ -224,9 +224,7 @@ FFHQ = np.array([[0.37691676, 0.46864664], [0.62285697, 0.46912813], [0.50123859
                  [0.39308822, 0.72541100], [0.61150205, 0.72490465]], np.float32) * 512
 
 
-def detect_faces(rgb, job=None, min_score=0.7):
-    """YuNet face finder run directly through onnxruntime. Returns boxes plus 5 landmarks per face."""
-    sess = session("detect", job)
+def _detect_once(sess, rgb, min_score):
     h, w = rgb.shape[:2]
     sc = 640 / max(h, w)
     r = cv2.resize(rgb, (max(1, int(w * sc)), max(1, int(h * sc))), interpolation=cv2.INTER_AREA if sc < 1 else cv2.INTER_LINEAR)
@@ -243,13 +241,32 @@ def detect_faces(rgb, job=None, min_score=0.7):
         cx, cy = (col + bb[:, 0]) * st, (row + bb[:, 1]) * st
         bw, bh = np.exp(bb[:, 2]) * st, np.exp(bb[:, 3]) * st
         for j in np.nonzero(sco > min_score)[0]:
-            boxes.append([float(cx[j] - bw[j] / 2), float(cy[j] - bh[j] / 2), float(bw[j]), float(bh[j])])
+            boxes.append([float(cx[j] - bw[j] / 2) / sc, float(cy[j] - bh[j] / 2) / sc, float(bw[j]) / sc, float(bh[j]) / sc])
             scores.append(float(sco[j]))
-            kps.append(np.stack([(kp[j, 0::2] + col[j]) * st, (kp[j, 1::2] + row[j]) * st], 1))
+            kps.append(np.stack([(kp[j, 0::2] + col[j]) * st, (kp[j, 1::2] + row[j]) * st], 1) / sc)
+    return boxes, scores, kps
+
+
+def detect_faces(rgb, job=None, min_score=0.7):
+    """YuNet face finder run directly through onnxruntime. Returns boxes plus 5 landmarks per face.
+    Small faces in big photos are found by also scanning the photo in native-resolution tiles."""
+    sess = session("detect", job)
+    h, w = rgb.shape[:2]
+    boxes, scores, kps = _detect_once(sess, rgb, min_score)
+    if max(h, w) > 700:
+        step = 448
+        for y in range(0, max(1, h - 640) + step, step):
+            for x in range(0, max(1, w - 640) + step, step):
+                y0, x0 = min(y, max(0, h - 640)), min(x, max(0, w - 640))
+                b2, s2, k2 = _detect_once(sess, rgb[y0:y0 + 640, x0:x0 + 640], max(min_score, 0.6))
+                for bb, sc_, kk in zip(b2, s2, k2):
+                    boxes.append([bb[0] + x0, bb[1] + y0, bb[2], bb[3]])
+                    scores.append(sc_)
+                    kps.append(kk + np.array([x0, y0], np.float32))
     if not boxes:
         return []
     keep = np.array(cv2.dnn.NMSBoxes(boxes, scores, min_score, 0.3)).flatten()
-    out = [{"box": tuple(v / sc for v in boxes[i]), "lm": (kps[i] / sc).astype(np.float32), "score": scores[i]} for i in keep]
+    out = [{"box": tuple(boxes[i]), "lm": kps[i].astype(np.float32), "score": scores[i]} for i in keep]
     out.sort(key=lambda f: -f["box"][2] * f["box"][3])
     return out
 
@@ -280,6 +297,7 @@ def restore_faces(job, rgb, blend, base, span):
         back = cv2.warpAffine(y, inv, (w, h), flags=cv2.INTER_CUBIC)
         mw = cv2.warpAffine(feather, inv, (w, h), flags=cv2.INTER_LINEAR)[..., None] * blend
         out = out * (1 - mw) + back * mw
+    job.add_note(f"{len(faces)} face(s) restored.")
     return np.clip(out + 0.5, 0, 255).astype(np.uint8)
 
 
@@ -324,6 +342,68 @@ def auto_tone(rgb, s):
     sat = hsv[..., 1] / 255
     hsv[..., 1] = np.clip((sat + (1 - sat) * sat * 0.5 * s) * 255, 0, 255)  # vibrance: lifts dull colours, spares vivid ones
     return cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2RGB)
+
+
+def _box(x, r):
+    return cv2.boxFilter(x, -1, (2 * r + 1, 2 * r + 1))
+
+
+def _guided(guide, src, r, eps):
+    mi, mp = _box(guide, r), _box(src, r)
+    a = (_box(guide * src, r) - mi * mp) / (_box(guide * guide, r) - mi * mi + eps)
+    return _box(a, r) * guide + _box(mp - a * mi, r)
+
+
+def haze_amount(rgb):
+    """0 = clear photo, 1 = milky / faded (lifted blacks, washed-out contrast)."""
+    g = cv2.cvtColor(rgb[::4, ::4], cv2.COLOR_RGB2GRAY)
+    return float(np.clip((np.percentile(g, 1) / 255 - 0.04) / 0.2, 0, 1))
+
+
+def dehaze(rgb, s):
+    """Removes haze, fog and the washed-out 'faded' look (dark-channel prior, edge-aware)."""
+    amt = haze_amount(rgb) * s
+    if amt < 0.08:
+        return rgb
+    h, w = rgb.shape[:2]
+    k = min(1.0, 900 / max(h, w))
+    sm = cv2.resize(rgb, (int(w * k), int(h * k)), interpolation=cv2.INTER_AREA) if k < 1 else rgb
+    f = sm.astype(np.float32) / 255
+    sh, sw = f.shape[:2]
+    patch = max(5, (min(sh, sw) // 70) | 1)
+    ker = np.ones((patch, patch), np.uint8)
+    dark = cv2.erode(f.min(2), ker)
+    n = max(1, int(sh * sw * 0.002))
+    A = np.minimum(f.reshape(-1, 3)[np.argpartition(dark.ravel(), -n)[-n:]].mean(0), 0.97)
+    t = 1 - min(0.85, 0.85 * amt) * cv2.erode((f / A).min(2), ker)
+    gray = cv2.cvtColor(sm, cv2.COLOR_RGB2GRAY).astype(np.float32) / 255
+    t = np.clip(_guided(gray, t.astype(np.float32), patch * 3, 1e-3), 0.35, 1)
+    if k < 1:
+        t = cv2.resize(t, (w, h), interpolation=cv2.INTER_CUBIC)
+    out = (rgb.astype(np.float32) / 255 - A) / t[..., None] + A
+    return np.clip(out * 255 + 0.5, 0, 255).astype(np.uint8)
+
+
+def deblur(rgb, s):
+    """Undoes soft focus / camera blur on the brightness channel (Richardson-Lucy), so nothing is invented."""
+    g = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+    sm = g if max(g.shape) <= 1000 else cv2.resize(g, None, fx=1000 / max(g.shape), fy=1000 / max(g.shape), interpolation=cv2.INTER_AREA)
+    lv = cv2.Laplacian(sm, cv2.CV_64F).var()
+    if lv > 700:
+        return rgb  # already crisp
+    sigma = (1.7 if lv < 40 else 1.4 if lv < 120 else 1.0) * max(1.0, max(g.shape) / 1300)
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    L = lab[..., 0] / 255 + 1e-3
+    r = int(np.ceil(3 * sigma))
+    kk = cv2.getGaussianKernel(2 * r + 1, sigma)
+    psf = (kk @ kk.T).astype(np.float32)
+    est = L.copy()
+    for _ in range(10):
+        conv = cv2.filter2D(est, -1, psf, borderType=cv2.BORDER_REFLECT)
+        est = np.clip(est * cv2.filter2D(L / np.maximum(conv, 1e-3), -1, psf, borderType=cv2.BORDER_REFLECT), 0, 1)
+    a = min(1.0, 0.9 * s)
+    lab[..., 0] = np.clip((L * (1 - a) + est * a) * 255, 0, 255)
+    return cv2.cvtColor(lab.astype(np.uint8), cv2.COLOR_LAB2RGB)
 
 
 def sharpen(rgb, s):
@@ -652,21 +732,31 @@ def _prefetch(job, keys):
 
 
 def tool_enhance(job, img, mask, p):
-    s = {"natural": .6, "strong": 1.0}.get(p.get("strength"), .7)
+    s = {"natural": .65, "strong": 1.0}.get(p.get("strength"), .8)
     up = int(p.get("upscale") or 0)
     faces = bool(p.get("faces", True))
     _prefetch(job, (["upscale"] if up in (2, 4) else []) + (["detect", "face"] if faces else []))
+    hazy = [False]
+
+    def do_dehaze(a, b, c):
+        hazy[0] = haze_amount(a) > 0.08
+        return dehaze(a, s)
+
     steps = []
     if p.get("denoise", True):
         steps.append(("Reducing noise", 2, lambda a, b, c: denoise(a, s)))
+    if p.get("dehaze", True):
+        steps.append(("Removing haze and fading", 1, do_dehaze))
+    if p.get("deblur", True):
+        steps.append(("Removing blur", 2, lambda a, b, c: deblur(a, s)))
     if up in (2, 4):
         steps.append((f"Upscaling {up}x", 3, lambda a, b, c: upscale(job, a, up, b, c)))
     if faces:
-        steps.append(("Restoring faces", 5, lambda a, b, c: restore_faces(job, a, .75 if s < .8 else .9, b, c)))
+        steps.append(("Restoring faces", 5, lambda a, b, c: restore_faces(job, a, .85 if s < .8 else 1.0, b, c)))
     if p.get("tone", True):
-        steps.append(("Fixing light and colour", 1, lambda a, b, c: auto_tone(a, s)))
+        steps.append(("Fixing light and colour", 1, lambda a, b, c: auto_tone(a, s * (.35 if hazy[0] else 1.0))))
     if p.get("sharpen", True):
-        steps.append(("Sharpening", 1, lambda a, b, c: sharpen(a, s)))
+        steps.append(("Sharpening", 1, lambda a, b, c: sharpen(a, s * .6)))
     if not steps:
         raise LabError("Pick at least one improvement.")
     return to_png(_plan(job, steps, img)), "image/png"
@@ -706,10 +796,11 @@ def tool_restore(job, img, mask, p):
         steps.append(("Colorizing", 6, lambda a, b, c: colorize(job, a, b, c)))
     if up in (2, 4):
         steps.append((f"Upscaling {up}x", 3, lambda a, b, c: upscale(job, a, up, b, c)))
+    steps.append(("Removing blur", 2, lambda a, b, c: deblur(a, s)))
     if faces:
-        steps.append(("Restoring faces", 5, lambda a, b, c: restore_faces(job, a, .85, b, c)))
+        steps.append(("Restoring faces", 5, lambda a, b, c: restore_faces(job, a, .9, b, c)))
     if p.get("tone", True):
-        steps.append(("Fixing fading and contrast", 1, lambda a, b, c: auto_tone(a, s)))
+        steps.append(("Fixing fading and contrast", 1, lambda a, b, c: auto_tone(dehaze(a, s), s * .6)))
     steps.append(("Sharpening", 1, lambda a, b, c: sharpen(a, s * .8)))
     return to_png(_plan(job, steps, img)), "image/png"
 
