@@ -80,6 +80,14 @@ label.chk small{display:block;color:var(--dim);font-weight:400}
 #toast{position:fixed;bottom:112px;left:24px;max-width:60vw;background:var(--chalk);color:#10181C;padding:10px 14px;border-radius:10px;font-weight:600;display:none;z-index:9}
 input[type=number],select{flex:1;min-width:0;background:transparent;border:1px solid var(--line);border-radius:10px;color:var(--chalk);padding:9px 10px;font:500 14px var(--body)}
 select{width:100%;background:var(--panel)}
+
+.btn:active,.seg button:active,.tool:active,.th:active,.chips .btn:active{transform:scale(.96)}
+.btn,.seg button,.tool{transition:transform .08s,border-color .15s,background .15s,filter .15s}
+.btn.work,.btn.okd{pointer-events:none}
+.btn.work{opacity:.85}
+.btn.work::before{content:"";display:inline-block;width:12px;height:12px;margin-right:8px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-2px;animation:pcspin .7s linear infinite}
+@keyframes pcspin{to{transform:rotate(360deg)}}
+.btn.okd{filter:brightness(1.1)}
 </style>
 </head>
 <body>
@@ -327,9 +335,9 @@ async function runTool(it,tool,p,maskBlob,label){
 function commit(it,blob){it.history.push({file:it.file,url:it.url,prevUrl:it.prevUrl});
   it.file=new File([blob],stem(it.name)+'.png',{type:'image/png'});it.prevUrl=it.url;it.url=URL.createObjectURL(blob);it.vec=null}
 $('#apply').onclick=async()=>{
-  const tool=state.tool,T=TOOLS[tool],it0=cur();if(!it0||state.busy)return;
-  if(tool==='erase'&&!hasMask){toast('Paint over the object you want to remove first.');return}
-  if(tool==='privacy'&&!hasMask&&!$('#pv-faces').checked){toast('Turn on face hiding or paint an area first.');return}
+  const tool=state.tool,T=TOOLS[tool],it0=cur();$('#apply').dataset.done='1';if(!it0||state.busy)return;
+  if(tool==='erase'&&!hasMask){toast('Paint over the object you want to remove first.');$('#apply').dataset.done='0';return}
+  if(tool==='privacy'&&!hasMask&&!$('#pv-faces').checked){toast('Turn on face hiding or paint an area first.');$('#apply').dataset.done='0';return}
   const list=$('#all').checked&&!T.mask?state.items.slice():[it0],p=params();let notes=[];
   let maskBlob=null;if(T.mask&&hasMask)maskBlob=await new Promise(r=>dcv.toBlob(r,'image/png'));
   busy(true,'Starting...',0);
@@ -340,7 +348,7 @@ $('#apply').onclick=async()=>{
       if(res.note)notes.push(res.note)}
     if(T.mask)clearMask();
     toast(notes.length?notes[0]:(LABEL[tool]+' done'+(list.length>1?' for '+list.length+' photos.':'.')));
-  }catch(e){toast(e.message)}
+  }catch(e){toast(e.message);$('#apply').dataset.done='0'}
   finally{busy(false);select(state.cur)}
 };
 $('#undo').onclick=()=>{const it=cur();if(!it||!it.history.length)return;const h=it.history.pop();URL.revokeObjectURL(it.url);it.file=h.file;it.url=h.url;it.prevUrl=h.prevUrl||'';it.vec=null;select(state.cur)};
@@ -365,8 +373,8 @@ async function encode(it){
   return{blob:await tb(c,MIME[fmt],fmt==='jpg'?.95:1),fmt,ok:1};
 }
 function save(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)}
-$('#dl').onclick=async()=>{const it=cur();if(!it)return;
-  if(TOOLS[state.tool].svg){if(!it.vec){toast('Press Vectorize first.');return}save(it.vec.blob,stem(it.name)+'.svg');toast('Downloaded SVG');return}
+$('#dl').onclick=async()=>{const it=cur();$('#dl').dataset.done='1';if(!it)return;
+  if(TOOLS[state.tool].svg){if(!it.vec){toast('Press Vectorize first.');$('#dl').dataset.done='0';return}$('#dl').dataset.done='1';save(it.vec.blob,stem(it.name)+'.svg');toast('Downloaded SVG');return}
   const r=await encode(it);save(r.blob,`${stem(it.name)}${it.history.length?'-lab':''}.${r.fmt}`);
   toast(r.ok?'Downloaded - '+kb(r.blob.size):'Smallest possible is '+kb(r.blob.size)+', above your limit.')};
 $('#dlall').onclick=async()=>{const fd=new FormData();let miss=0;
@@ -382,6 +390,21 @@ $('#tocut').onclick=async()=>{try{const files=state.items.map(it=>({name:it.name
 
 /* ---------- start ---------- */
 $('#tools').onclick({target:$('.tool.on')});
+
+/* ---------- live buttons ---------- */
+async function work(id,label,fn){const b=$('#'+id);if(!b||b.classList.contains('work')||b.classList.contains('okd'))return;
+  const t=b.textContent,t0=Date.now();b.classList.add('work');b.setAttribute('aria-busy','true');b.textContent=label;
+  await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,30)));let ok=false;
+  try{await fn();ok=true}catch(e){toast(e&&e.message?e.message:'That did not work.')}
+  const w=500-(Date.now()-t0);if(w>0)await new Promise(r=>setTimeout(r,w));
+  b.classList.remove('work');b.removeAttribute('aria-busy');
+  if(ok&&b.dataset.done!=='0'){b.classList.add('okd');b.textContent='\u2713 Done';await new Promise(r=>setTimeout(r,900));b.classList.remove('okd')}
+  b.textContent=t}
+const wrap=(id,label)=>{const el=$('#'+id),h=el.onclick;el.onclick=()=>work(id,label,()=>h())};
+const say=(id,msg)=>{const el=$('#'+id),h=el.onclick;el.onclick=e=>{h(e);toast(msg)}};
+
+wrap('dl','Downloading...');wrap('dlall','Preparing ZIP...');wrap('tocut','Sending...');wrap('apply','Working...');
+say('undo','Undone');say('reset','Restored original');say('clearmask','Selection cleared');
 </script>
 </body>
 </html>

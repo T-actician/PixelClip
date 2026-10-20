@@ -85,6 +85,14 @@ select{width:100%;background:var(--panel)}
 @media(max-width:860px){body{grid-template-columns:1fr;grid-template-rows:56px minmax(320px,55vh) 88px auto;grid-template-areas:"top" "stage" "strip" "panel";overflow:auto}
 aside{border-left:0;border-top:1px solid var(--line)}}
 @media(prefers-reduced-motion:reduce){#drop rect,#busy::before{animation:none}}
+
+.btn:active,.seg button:active,.tool:active,.th:active,.chips .btn:active{transform:scale(.96)}
+.btn,.seg button,.tool{transition:transform .08s,border-color .15s,background .15s,filter .15s}
+.btn.work,.btn.okd{pointer-events:none}
+.btn.work{opacity:.85}
+.btn.work::before{content:"";display:inline-block;width:12px;height:12px;margin-right:8px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;vertical-align:-2px;animation:pcspin .7s linear infinite}
+@keyframes pcspin{to{transform:rotate(360deg)}}
+.btn.okd{filter:brightness(1.1)}
 </style>
 </head>
 <body>
@@ -496,6 +504,21 @@ window.addEventListener('resize',layout);
   const files=await new Promise(res=>{const q=db.transaction('handoff','readonly').objectStore('handoff').get('files');q.onsuccess=()=>res(q.result);q.onerror=()=>res(null)});
   if(files&&files.length){await new Promise(res=>{const tx=db.transaction('handoff','readwrite');tx.objectStore('handoff').delete('files');tx.oncomplete=res;tx.onerror=res});
     addFiles(files.map(f=>new File([f.blob],f.name,{type:f.blob.type||'image/png'})))}}catch(e){}})();
+
+/* ---------- live buttons ---------- */
+async function work(id,label,fn){const b=$('#'+id);if(!b||b.classList.contains('work')||b.classList.contains('okd'))return;
+  const t=b.textContent,t0=Date.now();b.classList.add('work');b.setAttribute('aria-busy','true');b.textContent=label;
+  await new Promise(r=>requestAnimationFrame(()=>setTimeout(r,30)));let ok=false;
+  try{await fn();ok=true}catch(e){toast(e&&e.message?e.message:'That did not work.')}
+  const w=500-(Date.now()-t0);if(w>0)await new Promise(r=>setTimeout(r,w));
+  b.classList.remove('work');b.removeAttribute('aria-busy');
+  if(ok&&b.dataset.done!=='0'){b.classList.add('okd');b.textContent='\u2713 Done';await new Promise(r=>setTimeout(r,900));b.classList.remove('okd')}
+  b.textContent=t}
+const wrap=(id,label)=>{const el=$('#'+id),h=el.onclick;el.onclick=()=>work(id,label,()=>h())};
+const say=(id,msg)=>{const el=$('#'+id),h=el.onclick;el.onclick=e=>{h(e);toast(msg)}};
+
+wrap('dl','Downloading...');wrap('dlall','Preparing ZIP...');wrap('urlgo','Adding...');
+say('undo','Undone');say('redo','Redone');say('reset','Touch-ups reset');
 </script>
 </body>
 </html>
