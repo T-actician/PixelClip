@@ -16,6 +16,7 @@ PyInstaller.__main__.run([
     "--onedir",
     "--add-data", f"index.html{os.pathsep}.",
     "--add-data", f"lab.html{os.pathsep}.",
+    "--add-data", f"models{os.pathsep}models",
     "--collect-all", "rembg",
     "--collect-all", "pymatting",
     "--collect-all", "onnxruntime",

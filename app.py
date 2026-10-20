@@ -1,6 +1,12 @@
 """PixelClip - photo toolkit (cutouts, ID photos, resizing, Photo Lab). Run: python app.py"""
-import io, ipaddress, socket, sys, threading, urllib.parse, urllib.request, webbrowser, zipfile
+import io, ipaddress, os, socket, sys, threading, urllib.parse, urllib.request, webbrowser, zipfile
 from pathlib import Path
+
+# Bundled AI models: if a "models" folder sits next to the app, use it and never download.
+_HERE = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+if (_HERE / "models").is_dir():
+    os.environ.setdefault("REMBG_HOME", str(_HERE / "models" / "rembg"))
+    os.environ.setdefault("PIXELCLIP_MODELS", str(_HERE / "models" / "lab"))
 from typing import List
 
 import uvicorn
