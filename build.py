@@ -27,4 +27,10 @@ PyInstaller.__main__.run([
     "--collect-all", "llvmlite",
     "--collect-all", "cv2",
     "--collect-all", "vtracer",
+    "--collect-all", "uvicorn",
+    "--collect-all", "fastapi",
+    "--collect-all", "starlette",
+    "--hidden-import", "uvicorn.lifespan.on",
+    "--hidden-import", "uvicorn.protocols.http.h11_impl",
+    "--hidden-import", "multipart",
 ])
