@@ -406,6 +406,9 @@ const say=(id,msg)=>{const el=$('#'+id),h=el.onclick;el.onclick=e=>{h(e);toast(m
 wrap('dl','Downloading...');wrap('dlall','Preparing ZIP...');wrap('tocut','Sending...');wrap('apply','Working...');
 say('undo','Undone');say('reset','Restored original');say('clearmask','Selection cleared');
 </script>
-<script>setInterval(function(){fetch("/api/ping").catch(function(){})},5000);fetch("/api/ping").catch(function(){})</script>
+<script>setInterval(function(){fetch("/api/ping").catch(function(){})},5000);fetch("/api/ping").catch(function(){});
+(function(){var d=document.createElement("div");d.textContent="Getting ready...";d.style.cssText="position:fixed;left:14px;bottom:14px;z-index:99;padding:8px 14px;border-radius:999px;background:#1c2b34;color:#fff;font:13px system-ui,sans-serif;border:1px solid #2c3f4a;display:none";document.body.appendChild(d);
+function c(){fetch("/api/ready").then(function(r){if(!r.ok)throw 0;return r.json()}).then(function(j){if(j.ready||j.error){d.style.display="none";return}d.style.display="block";setTimeout(c,500)}).catch(function(){d.style.display="none"})}c()})();
+</script>
 </body>
 </html>
