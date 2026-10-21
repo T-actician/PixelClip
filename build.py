@@ -15,6 +15,8 @@ PyInstaller.__main__.run([
     "--noconfirm",
     "--onedir",
     "--noconsole",
+    "--icon", "pixelclip.ico",
+    "--version-file", "version_info.txt",
     "--add-data", f"index.html{os.pathsep}.",
     "--add-data", f"lab.html{os.pathsep}.",
     "--add-data", f"models{os.pathsep}models",
