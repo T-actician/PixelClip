@@ -406,5 +406,6 @@ const say=(id,msg)=>{const el=$('#'+id),h=el.onclick;el.onclick=e=>{h(e);toast(m
 wrap('dl','Downloading...');wrap('dlall','Preparing ZIP...');wrap('tocut','Sending...');wrap('apply','Working...');
 say('undo','Undone');say('reset','Restored original');say('clearmask','Selection cleared');
 </script>
+<script>setInterval(function(){fetch("/api/ping").catch(function(){})},5000);fetch("/api/ping").catch(function(){})</script>
 </body>
 </html>

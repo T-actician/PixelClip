@@ -10,10 +10,11 @@ import os
 import PyInstaller.__main__
 
 PyInstaller.__main__.run([
-    "app.py",
+    "launcher.py",
     "--name", "PixelClip",
     "--noconfirm",
     "--onedir",
+    "--noconsole",
     "--add-data", f"index.html{os.pathsep}.",
     "--add-data", f"lab.html{os.pathsep}.",
     "--add-data", f"models{os.pathsep}models",
